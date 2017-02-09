@@ -21,6 +21,7 @@
 #include "vtkMRMLSequenceNode.h"
 #include "vtkMRMLSequenceStorageNode.h"
 #include "vtkMRMLVolumeSequenceStorageNode.h"
+#include "vtkMRMLBitStreamSequenceStorageNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -567,6 +568,7 @@ std::string vtkMRMLSequenceNode::GetDefaultStorageNodeClassName(const char* file
   std::vector< vtkSmartPointer<vtkMRMLStorageNode> > specializedStorageNodes;
   specializedStorageNodes.push_back(vtkSmartPointer<vtkMRMLVolumeSequenceStorageNode>::New());
   specializedStorageNodes.push_back(vtkSmartPointer<vtkMRMLLinearTransformSequenceStorageNode>::New());
+  specializedStorageNodes.push_back(vtkSmartPointer<vtkMRMLBitStreamSequenceStorageNode>::New());
   for (std::vector< vtkSmartPointer<vtkMRMLStorageNode> >::iterator specializedStorageNodeIt = specializedStorageNodes.begin();
     specializedStorageNodeIt != specializedStorageNodes.end(); ++specializedStorageNodeIt)
   {

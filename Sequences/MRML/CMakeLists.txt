@@ -8,6 +8,8 @@ include_directories(BEFORE ${vtkTeem_INCLUDE_DIRS})
 
 set(${KIT}_INCLUDE_DIRECTORIES
   ${Slicer_Base_INCLUDE_DIRS}
+  ${vtkSlicerOpenIGTLinkIFModuleMRML_SOURCE_DIR}
+  ${vtkSlicerOpenIGTLinkIFModuleMRML_BINARY_DIR}
   )
 
 set(${KIT}_SRCS
@@ -21,6 +23,8 @@ set(${KIT}_SRCS
   vtkMRMLSequenceStorageNode.h
   vtkMRMLVolumeSequenceStorageNode.cxx
   vtkMRMLVolumeSequenceStorageNode.h
+  vtkMRMLBitStreamSequenceStorageNode.cxx
+  vtkMRMLBitStreamSequenceStorageNode.h
   )
 
 set(${KIT}_TARGET_LIBRARIES
@@ -29,6 +33,7 @@ set(${KIT}_TARGET_LIBRARIES
   SlicerBaseLogic
   qSlicerBaseQTCLI
   vtkSlicerMarkupsModuleMRML
+  vtkSlicerOpenIGTLinkIFModuleMRML
   )
 
 #-----------------------------------------------------------------------------

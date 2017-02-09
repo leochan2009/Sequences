@@ -41,6 +41,9 @@
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
 
+// OpenIGTLinkIF node include
+#include "vtkMRMLBitStreamNode.h"
+
 //----------------------------------------------------------------------------
 
 vtkMRMLNodeSequencer::NodeSequencer::NodeSequencer()
@@ -194,6 +197,33 @@ public:
   }
 
 };
+
+
+//----------------------------------------------------------------------------
+
+class BitStreamNodeSequencer : public vtkMRMLNodeSequencer::NodeSequencer
+{
+public:
+  BitStreamNodeSequencer()
+  {
+    this->SupportedNodeClassName = "vtkMRMLBitStreamNode";
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLStorableNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
+  }
+  
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  {
+    int oldModified = target->StartModify();
+    vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
+    vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
+
+    int length = sourceBitStreamNode->GetBitStreamLength();
+    char* bitstream = sourceBitStreamNode->GetBitStream();
+    targetBitStreamNode->SetBitStream(bitstream, length);
+    target->EndModify(oldModified);
+  }
+};
+
 
 //----------------------------------------------------------------------------
 
@@ -518,6 +548,7 @@ vtkMRMLNodeSequencer::vtkMRMLNodeSequencer():Superclass()
   this->RegisterNodeSequencer(new SliceCompositeNodeSequencer());
   this->RegisterNodeSequencer(new ViewNodeSequencer());
   this->RegisterNodeSequencer(new MarkupsFiducialNodeSequencer());
+  this->RegisterNodeSequencer(new BitStreamNodeSequencer());
 }
 
 //----------------------------------------------------------------------------
