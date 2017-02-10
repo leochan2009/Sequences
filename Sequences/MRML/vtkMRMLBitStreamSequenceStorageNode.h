@@ -38,9 +38,7 @@ public:
   
   /// Return true if the node can be written by using thie writer.
   virtual bool CanWriteFromReferenceNode(vtkMRMLNode* refNode);
-  virtual int WriteDataInternal(vtkMRMLNode *refNode);
   
-  ///
   /// Return a default file extension for writting
   virtual const char* GetDefaultWriteFileExtension();
   
@@ -50,6 +48,9 @@ protected:
   vtkMRMLBitStreamSequenceStorageNode(const vtkMRMLBitStreamSequenceStorageNode&);
   void operator=(const vtkMRMLBitStreamSequenceStorageNode&);
   
+  
+  virtual int WriteDataInternal(vtkMRMLNode *refNode);
+
   /// Does the actual reading. Returns 1 on success, 0 otherwise.
   /// Returns 0 by default (read not supported).
   /// This implementation delegates most everything to the superclass
