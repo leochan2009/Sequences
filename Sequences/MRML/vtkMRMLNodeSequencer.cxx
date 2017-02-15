@@ -224,14 +224,14 @@ public:
     vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
 
-    int length = sourceBitStreamNode->GetBitStreamLength();
-    char* bitstream = sourceBitStreamNode->GetBitStream();
+    //int length = sourceBitStreamNode->GetMessageStreamLength();
+    igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
     // targetScalarVolumeNode->SetAndObserveTransformNodeID is not called, as we want to keep the currently applied transform
     if (targetBitStreamNode)
     {
       //targetBitStreamNode->SetName("MacCamera5_BitStream");
-      targetBitStreamNode->SetBitStream(bitstream, length);
+      targetBitStreamNode->SetMessageStream(msgstream);
       //targetBitStreamNode->SetVectorVolumeNode(targetVolumeNode); // invokes vtkMRMLVolumeNode::ImageDataModifiedEvent, which is not masked by StartModify
     }
     target->EndModify(oldModified);
@@ -243,12 +243,12 @@ public:
     vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
     
-    int length = sourceBitStreamNode->GetBitStreamLength();
-    char* bitstream = sourceBitStreamNode->GetBitStream();
+    //int length = sourceBitStreamNode->GetMessageStreamLength();
+    igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
     if (targetBitStreamNode)
     {
-      targetBitStreamNode->DecodeBitStream(bitstream, length);
+      targetBitStreamNode->DecodeMessageStream(msgstream);
     }
     target->EndModify(oldModified);
   }

@@ -26,7 +26,9 @@ set(${KIT}_SRCS
   vtkMRMLBitStreamSequenceStorageNode.cxx
   vtkMRMLBitStreamSequenceStorageNode.h
   )
-
+message("dfaf")
+message("${vtkSlicerOpenIGTLinkIFModuleMRML_SOURCE_DIR}")
+message("${vtkSlicerOpenIGTLinkIFModuleMRML_BINARY_DIR}")
 set(${KIT}_TARGET_LIBRARIES
   ${ITK_LIBRARIES}
   ${MRML_LIBRARIES}

@@ -303,7 +303,7 @@ bool vtkMRMLBitStreamSequenceStorageNode::CanWriteFromReferenceNode(vtkMRMLNode 
   for (int frameIndex = 0; frameIndex < numberOfFrameVolumes; frameIndex++)
   {
     vtkMRMLBitStreamNode* bitstream = vtkMRMLBitStreamNode::SafeDownCast(sequenceNode->GetNthDataNode(frameIndex));
-    if (bitstream == NULL || (bitstream->GetBitStreamLength()<=0))
+    if (bitstream == NULL || (bitstream->GetMessageValid()<=0))
     {
       vtkDebugMacro("vtkMRMLBitStreamSequenceStorageNode::CanWriteFromReferenceNode: stream nodes has not bit stream (frame " << frameIndex << ")");
       return false;
@@ -353,10 +353,12 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
   for (int frameIndex=0; frameIndex<numberOfFrameBitStreams; frameIndex++)
   {
     vtkMRMLBitStreamNode* frameBitStream = vtkMRMLBitStreamNode::SafeDownCast(bitStreamSequenceNode->GetNthDataNode(frameIndex));
-    if (frameBitStream!=NULL || frameBitStream->GetBitStreamLength()>0)
+    if (frameBitStream!=NULL || frameBitStream->GetMessageValid()>0)
     {
       headerOutStream << frameIndex << std::setw(0);
-      headerOutStream.write(frameBitStream->GetBitStream(), frameBitStream->GetBitStreamLength());
+      char* messageStream = (char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer();
+      int messageLength = frameBitStream->GetMessageStreamBuffer()->GetPackSize();
+      headerOutStream.write(messageStream, messageLength);
       headerOutStream << std::endl;
     }
   }
