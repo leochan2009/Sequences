@@ -353,7 +353,7 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
   for (int frameIndex=0; frameIndex<numberOfFrameBitStreams; frameIndex++)
   {
     vtkMRMLBitStreamNode* frameBitStream = vtkMRMLBitStreamNode::SafeDownCast(bitStreamSequenceNode->GetNthDataNode(frameIndex));
-    if (frameBitStream==NULL || frameBitStream->GetBitStreamLength()<=0)
+    if (frameBitStream!=NULL || frameBitStream->GetBitStreamLength()>0)
     {
       headerOutStream << frameIndex << std::setw(0);
       headerOutStream.write(frameBitStream->GetBitStream(), frameBitStream->GetBitStreamLength());

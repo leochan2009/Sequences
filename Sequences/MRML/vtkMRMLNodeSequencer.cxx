@@ -37,6 +37,7 @@
 #include <vtkMRMLTransformNode.h>
 #include <vtkMRMLVectorVolumeDisplayNode.h>
 #include <vtkMRMLViewNode.h>
+#include <vtkMRMLVectorVolumeNode.h>
 #include <vtkMRMLVolumeNode.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
@@ -209,6 +210,10 @@ public:
   BitStreamNodeSequencer()
   {
     this->SupportedNodeClassName = "vtkMRMLBitStreamNode";
+    this->RecordingEvents->InsertNextValue(vtkMRMLVolumeNode::ImageDataModifiedEvent);
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLDisplayableNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLVolumeNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLTransformableNode");
     this->SupportedNodeParentClassNames.push_back("vtkMRMLStorableNode");
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
@@ -221,8 +226,54 @@ public:
 
     int length = sourceBitStreamNode->GetBitStreamLength();
     char* bitstream = sourceBitStreamNode->GetBitStream();
-    targetBitStreamNode->SetBitStream(bitstream, length);
+    targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
+    // targetScalarVolumeNode->SetAndObserveTransformNodeID is not called, as we want to keep the currently applied transform
+    if (targetBitStreamNode)
+    {
+      //targetBitStreamNode->SetName("MacCamera5_BitStream");
+      targetBitStreamNode->SetBitStream(bitstream, length);
+      //targetBitStreamNode->SetVectorVolumeNode(targetVolumeNode); // invokes vtkMRMLVolumeNode::ImageDataModifiedEvent, which is not masked by StartModify
+    }
     target->EndModify(oldModified);
+  }
+  
+  virtual void CopyNodeReplay(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false*/ )
+  {
+    int oldModified = target->StartModify();
+    vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
+    vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
+    
+    int length = sourceBitStreamNode->GetBitStreamLength();
+    char* bitstream = sourceBitStreamNode->GetBitStream();
+    targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
+    if (targetBitStreamNode)
+    {
+      targetBitStreamNode->DecodeBitStream(bitstream, length);
+    }
+    target->EndModify(oldModified);
+  }
+
+  virtual void AddDefaultDisplayNodes(vtkMRMLNode* node)
+  {
+    vtkMRMLVectorVolumeNode* displayableNode = vtkMRMLVectorVolumeNode::SafeDownCast(node);
+    if (displayableNode == NULL)
+    {
+      // not a displayable node, there is nothing to do
+      return;
+    }
+    if (displayableNode->GetDisplayNode())
+    {
+      // there is a display node already
+      return;
+    }
+    displayableNode->CreateDefaultDisplayNodes();
+    
+    // Turn off auto window/level for scalar volumes (it is costly to compute recommended ww/wl and image would appear to be flickering)
+    vtkMRMLVectorVolumeDisplayNode* vectorVolumeDisplayNode = vtkMRMLVectorVolumeDisplayNode::SafeDownCast(displayableNode->GetDisplayNode());
+    if (vectorVolumeDisplayNode)
+    {
+      vectorVolumeDisplayNode->AutoWindowLevelOff();
+    }
   }
 };
 
