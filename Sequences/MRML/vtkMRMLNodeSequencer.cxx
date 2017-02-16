@@ -246,7 +246,7 @@ public:
     //int length = sourceBitStreamNode->GetMessageStreamLength();
     igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
-    if (targetBitStreamNode)
+    if (strcmp(targetBitStreamNode->GetName(),sourceBitStreamNode->GetName())!=0)
     {
       targetBitStreamNode->DecodeMessageStream(msgstream);
     }
