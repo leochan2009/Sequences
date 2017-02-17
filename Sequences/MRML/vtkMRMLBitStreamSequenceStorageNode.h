@@ -62,6 +62,11 @@ protected:
   
   /// Initialize all the supported write file types
   virtual void InitializeSupportedWriteFileTypes();
+  
+  /// String Operation
+  int GetTagValue(char* headerString, int headerLenght, const char* tag, int tagLength, std::string &tagValueString, int&tagValueLength);
+  
+  std::string GetValueByDelimiter(std::string &inputString, std::string delimiter, int index);
 };
 
 #endif

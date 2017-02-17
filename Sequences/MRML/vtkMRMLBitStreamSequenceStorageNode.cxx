@@ -6,7 +6,6 @@
  or http://www.slicer.org/copyright/copyright.txt for details.
  
  =========================================================================auto=*/
-
 #include <algorithm>
 
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
@@ -49,6 +48,60 @@ bool vtkMRMLBitStreamSequenceStorageNode::CanReadInReferenceNode(vtkMRMLNode *re
   return refNode->IsA("vtkMRMLSequenceNode");
 }
 
+
+
+int vtkMRMLBitStreamSequenceStorageNode::GetTagValue(char* headerString, int headerLenght, const char* tag, int tagLength, std::string &tagValueString, int&tagValueLength)
+{
+  int beginIndex = -1;
+  int endIndex = -1;
+  int index = 0;
+  for(index = 0; index < headerLenght; index ++ )
+  {
+    if (index < headerLenght -tagLength)
+    {
+      std::string stringTemp(&(headerString[index]), &(headerString[index + tagLength]));
+      if(strcmp(stringTemp.c_str(),tag)==0)
+      {
+        beginIndex = index+tagLength+2;
+      }
+    }
+    std::string stringTemp2(&(headerString[index]), &(headerString[index + 1]));
+    if(beginIndex>=0 && (strcmp(stringTemp2.c_str(), "\n") == 0))
+    {
+      endIndex = index;
+      break;
+    }
+  }
+  if(beginIndex>=0 &&(endIndex>beginIndex))
+  {
+    tagValueString = std::string(&(headerString[beginIndex]), &(headerString[endIndex]));
+    return 1;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+std::string vtkMRMLBitStreamSequenceStorageNode::GetValueByDelimiter(std::string &inputString, std::string delimiter, int index)
+{
+  size_t pos = 0;
+  std::string token;
+  int tokenIndex = 0;
+  while ((pos = inputString.find(delimiter)) != std::string::npos) {
+    token = inputString.substr(0, pos);
+    //std::cout << token << std::endl;
+    inputString.erase(0, pos + delimiter.length());
+    tokenIndex++;
+    if (tokenIndex == index)
+    {
+      return token;
+    }
+  }
+  return NULL;
+}
+
+
 //----------------------------------------------------------------------------
 int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
 {
@@ -73,215 +126,120 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
   
   FILE* stream = fopen(fullName.c_str(),"rb");
   
-  // Check if this is a NRRD file that we can read
+  // Check if this is a  file that we can read
   if (stream == NULL)
   {
     vtkDebugMacro("vtkMRMLBitStreamSequenceStorageNode: This is not a text file");
     return 0;
   }
-  const int MAX_LINE_LENGTH = 100000000;
-  
-  char line[MAX_LINE_LENGTH + 1] = { 0 };
-  /*
-  while (fgets(line, MAX_LINE_LENGTH, stream))
+  std::string data("  ");
+  int headerLength = 0;
+  int temp = 1;
+  while(fread(&data[0],2,1,stream)){
+    fseek(stream, -1, SEEK_CUR);
+    temp ++;
+    if (strcmp(data.c_str(),"\n\n")==0)
+    {
+      headerLength = temp;
+      break;
+    }
+  }
+  char * headerString = new char[headerLength];
+  fread(headerString, headerLength,1,stream);
+  bool fileValid = true;
+  std::string tagValueString("");
+  int tagValueLength;
+  if(GetTagValue(headerString, headerLength, "ObjectType", 10, tagValueString, tagValueLength))
   {
-    std::string lineStr = line;
-    
-    // Split line into name and value
-    size_t equalSignFound = 0;
-    equalSignFound = lineStr.find_first_of("=");
-    if (equalSignFound == std::string::npos)
+    if (strcmp(tagValueString.c_str(), "BitStream")==0)
     {
-      vtkGenericWarningMacro("Parsing line failed, equal sign is missing (" << lineStr << ")");
-      continue;
+      fileValid *= true;
     }
-    std::string name = lineStr.substr(0, equalSignFound);
-    std::string value = lineStr.substr(equalSignFound + 1);
-    
-    // Trim spaces from the left and right
-    Trim(name);
-    Trim(value);
-    
-    // Only consider the Seq_Frame
-    if (strcmp(name.c_str(),"Seq_Frame") != 0)
+    else
     {
-      continue;
+      fileValid = false;
     }
-    
-    
-    // frame field
-    // name: Seq_Frame0000_CustomTransform
-    name.erase(0, SEQMETA_FIELD_FRAME_FIELD_PREFIX.size()); // 0000_CustomTransform
-    
-    // Split line into name and value
-    size_t underscoreFound;
-    underscoreFound = name.find_first_of("_");
-    if (underscoreFound == std::string::npos)
+  }
+  if(GetTagValue(headerString, headerLength, "Codec", 5, tagValueString, tagValueLength))
+  {
+    if (strcmp(tagValueString.c_str(), "H264")==0)
     {
-      vtkGenericWarningMacro("Parsing line failed, underscore is missing from frame field name (" << lineStr << ")");
-      continue;
+      fileValid *= true;
     }
-    
-    std::string frameNumberStr = name.substr(0, underscoreFound); // 0000
-    std::string frameFieldName = name.substr(underscoreFound + 1); // CustomTransform
-    
-    int frameNumber = 0;
-    StringToInt(frameNumberStr.c_str(), frameNumber); // TODO: Removed warning
-    if (frameNumber > lastFrameNumber)
+    else
     {
-      lastFrameNumber = frameNumber;
+      fileValid = false;
     }
-    
-    // Convert the string to transform and add transform to hierarchy
-    if (frameFieldName.find("Transform") != std::string::npos && frameFieldName.find("Status") == std::string::npos)
+  }
+  std::string volumeName = "";
+  if(GetTagValue(headerString, headerLength, "VolumeName", 10, tagValueString, tagValueLength))
+  {
+    fileValid *= true;
+    volumeName = tagValueString;
+  }
+  else
+  {
+    fileValid = false;
+  }
+  if(fileValid)
+  {
+    vtkMRMLBitStreamNode * frameProxyNode = vtkMRMLBitStreamNode::New();
+    frameProxyNode->SetUpVolumeAndConverter(volumeName.c_str());
+    char* data= (char *)" ";
+    char* timeStamp = NULL;
+    temp = 0;
+    int dataLength = 0;
+    bool proxyNodeSet = false;
+    bool timeStampFound = false;
+    bool frameMessageFound = false;
+    vtkMRMLBitStreamNode * frameNode;
+    while(fread(&data[0],1,1,stream))
     {
-      vtkNew<vtkMatrix4x4> matrix;
-      bool success = vtkAddonMathUtilities::FromString(matrix.GetPointer(), value);
-      if (!success)
+      if (strcmp(data,"\n")==0 && dataLength && (!timeStampFound))
       {
+        timeStamp = new char[dataLength];
+        fseek(stream, -dataLength, SEEK_CUR);
+        fread(timeStamp, dataLength, 1, stream);
+        timeStampFound = true;
+        dataLength = 0;
         continue;
       }
-      vtkMRMLLinearTransformNode* currentTransform = vtkMRMLLinearTransformNode::New(); // will be deleted when added to the scene
-      currentTransform->SetMatrixTransformToParent(matrix.GetPointer());
-      // Generating a unique name is important because that will be used to generate the filename by default
-      currentTransform->SetName(frameFieldName.c_str());
-      importedTransformNodes[frameNumber].push_back(currentTransform);
-    }
-    
-    if (frameFieldName.compare("Timestamp") == 0)
-    {
-      double timestampSec = atof(value.c_str());
-      // round timestamp to 3 decimal digits, as timestamp is included in node names and having lots of decimal digits would
-      // sometimes lead to extremely long node names
-      std::ostringstream timestampSecStr;
-      timestampSecStr << std::fixed << std::setprecision(3) << timestampSec << std::ends;
-      frameNumberToIndexValueMap[frameNumber] = timestampSecStr.str();
-    }
-    
-    if (ferror(stream))
-    {
-      vtkGenericWarningMacro("Error reading the file " << fileName.c_str());
-      break;
-    }
-    if (feof(stream))
-    {
-      break;
-    }
-    
-  }
-  fclose(stream);
-  
-  // Now add all the nodes to the scene
-  
-  std::map< std::string, vtkMRMLSequenceNode* > transformSequenceNodes;
-  
-  for (int currentFrameNumber = 0; currentFrameNumber <= lastFrameNumber; currentFrameNumber++)
-  {
-    std::map<int, std::vector<vtkMRMLLinearTransformNode*> >::iterator transformsForCurrentFrame = importedTransformNodes.find(currentFrameNumber);
-    if (transformsForCurrentFrame == importedTransformNodes.end())
-    {
-      // no transforms for this frame
-      continue;
-    }
-    std::string paramValueString = frameNumberToIndexValueMap[currentFrameNumber];
-    for (std::vector<vtkMRMLLinearTransformNode*>::iterator transformIt = transformsForCurrentFrame->second.begin(); transformIt != transformsForCurrentFrame->second.end(); ++transformIt)
-    {
-      vtkMRMLLinearTransformNode* transform = (*transformIt);
-      vtkMRMLSequenceNode* transformsSequenceNode = NULL;
-      if (transformSequenceNodes.find(transform->GetName()) == transformSequenceNodes.end())
+      if (strcmp(data,"\n")==0 && dataLength  && (!frameMessageFound))
       {
-        // Setup hierarchy structure
-        vtkMRMLSequenceNode* newTransformsSequenceNode = NULL;
-        if (numberOfCreatedNodes < createdNodes.size())
+        if(!proxyNodeSet)
         {
-          // reuse supplied sequence node
-          newTransformsSequenceNode = createdNodes[numberOfCreatedNodes];
-          newTransformsSequenceNode->RemoveAllDataNodes();
+          frameNode = frameProxyNode;
+          proxyNodeSet = true;
         }
         else
         {
-          // Create new sequence node
-          newTransformsSequenceNode = vtkMRMLSequenceNode::New();
-          createdNodes.push_back(newTransformsSequenceNode);
+          frameNode = vtkMRMLBitStreamNode::New();
+          frameNode->SetVectorVolumeNode(frameProxyNode->GetVectorVolumeNode());
         }
-        numberOfCreatedNodes++;
-        transformsSequenceNode = newTransformsSequenceNode;
-        transformsSequenceNode->SetIndexName("time");
-        transformsSequenceNode->SetIndexUnit("s");
-        std::string transformName = transform->GetName();
-        // Strip "Transform" from the end of the transform name
-        std::string transformPostfix = "Transform";
-        if (transformName.length() > transformPostfix.length() &&
-            transformName.compare(transformName.length() - transformPostfix.length(),
-                                  transformPostfix.length(), transformPostfix) == 0)
-        {
-          // ends with "Transform" (SomethingToSomethingElseTransform),
-          // remove it (to have SomethingToSomethingElse)
-          transformName.erase(transformName.length() - transformPostfix.length(), transformPostfix.length());
-        }
-        // Save transform name to Sequences.Source attribute so that modules can
-        // find a transform by matching the original the transform name.
-        transformsSequenceNode->SetAttribute("Sequences.Source", transformName.c_str());
-        
-        transformSequenceNodes[transform->GetName()] = transformsSequenceNode;
+        timeStamp = new char[dataLength];
+        fseek(stream, -dataLength, SEEK_CUR);
+        fread(frameNode->GetMessageStreamBuffer()->GetPackPointer(), dataLength, 1, stream);
+        frameMessageFound = true;
+        timeStampFound = false; // time stamp should be found first
+        dataLength = 0;
+        continue;
       }
-      else
+      if(timeStampFound && frameMessageFound)
       {
-        transformsSequenceNode = transformSequenceNodes[transform->GetName()];
+        volSequenceNode->SetDataNodeAtValue(frameNode, std::string(timeStamp));
+        delete timeStamp;
+        timeStamp = NULL;
+        timeStampFound = false;
+        frameMessageFound = false;
+        dataLength = 0;
       }
-      transform->SetHideFromEditors(false);
-      // Generating a unique name is important because that will be used to generate the filename by default
-      std::ostringstream nameStr;
-      nameStr << transform->GetName() << "_" << std::setw(4) << std::setfill('0') << currentFrameNumber << std::ends;
-      transform->SetName(nameStr.str().c_str());
-      transformsSequenceNode->SetDataNodeAtValue(transform, paramValueString.c_str());
-      transform->Delete(); // ownership transferred to the sequence node
+      dataLength++;
     }
+    
   }
   
-  // Add to scene and set name and storage node
-  std::string fileNameName = vtksys::SystemTools::GetFilenameName(fileName);
-  std::string shortestBaseNodeName;
-  int transformNodeIndex = 0;
-  for (std::deque< vtkSmartPointer<vtkMRMLSequenceNode> >::iterator createdTransformNodeIt = createdNodes.begin();
-       createdTransformNodeIt != createdNodes.end() && transformNodeIndex < numberOfCreatedNodes; ++createdTransformNodeIt, transformNodeIndex++)
-  {
-    // strip known file extensions from filename to get base name
-    std::string transformName = (*createdTransformNodeIt)->GetAttribute("Sequences.Source") ?
-    (*createdTransformNodeIt)->GetAttribute("Sequences.Source") : "";
-    std::string baseNodeName = vtkMRMLSequenceStorageNode::GetSequenceBaseName(fileNameName, transformName);
-    if (shortestBaseNodeName.empty() || baseNodeName.size() < shortestBaseNodeName.size())
-    {
-      shortestBaseNodeName = baseNodeName;
-    }
-    std::string transformsSequenceName = vtkMRMLSequenceStorageNode::GetSequenceNodeName(baseNodeName, transformName);
-    (*createdTransformNodeIt)->SetName(transformsSequenceName.c_str());
-    if (scene && (*createdTransformNodeIt)->GetScene() == NULL)
-    {
-      scene->AddNode(*createdTransformNodeIt);
-    }
-    if ((*createdTransformNodeIt)->GetScene())
-    {
-      // Add/initialize storage node
-      if (!(*createdTransformNodeIt)->GetStorageNode())
-      {
-        (*createdTransformNodeIt)->AddDefaultStorageNode();
-      }
-      if (numberOfCreatedNodes == 1)
-      {
-        // Only one transform is stored in this file. Update stored time to mark the file as not modified since read.
-        vtkMRMLLinearTransformSequenceStorageNode* storageNode =
-        vtkMRMLLinearTransformSequenceStorageNode::SafeDownCast((*createdTransformNodeIt)->GetStorageNode());
-        if (storageNode)
-        {
-          // Only one transform is stored in this file. Update stored time to mark the file as not modified since read.
-          storageNode->StoredTime->Modified();
-        }
-      }
-    }
-  }
-     */
-  // success
+  
+  
   return 1;
 }
 
@@ -321,7 +279,7 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     vtkErrorMacro(<< "vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal: Do not recognize node type " << refNode->GetClassName());
     return 0;
   }
-
+  char* volumeName = (char*)"";
   if (bitStreamSequenceNode->GetNumberOfDataNodes()>0)
   {
     vtkMRMLBitStreamNode* frameBitStream = vtkMRMLBitStreamNode::SafeDownCast(bitStreamSequenceNode->GetNthDataNode(0));
@@ -330,6 +288,7 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
       vtkErrorMacro(<< "vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal: Data node is not a bit stream");
       return 0;
     }
+    volumeName = frameBitStream->GetVectorVolumeNode()->GetName();
   }
   std::string fullName = this->GetFullNameFromFileName();
   if (fullName == std::string("") || vtksys::SystemTools::FileExists(fullName.c_str()))
@@ -341,28 +300,34 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
   // Append the transform information to the end of the file
   std::stringstream defaultHeaderOutStream;
   defaultHeaderOutStream
-  << "ObjectType = BitStream" << std::endl
-  << "Codec = H264" << std::endl;
-
-  // Append the transform information to the end of the file
-  std::ofstream headerOutStream(fullName.c_str(), std::ios_base::binary);
-  headerOutStream << defaultHeaderOutStream.str();
-  headerOutStream << std::setfill('0');
-  
+  << "ObjectType: BitStream" << std::endl
+  << "Codec: H264" << std::endl
+  << "VolumeName: " << volumeName << std::endl;
+  // Append the bit stream to the end of the file
+  std::ofstream outStream(fullName.c_str(), std::ios_base::binary);
+  outStream << defaultHeaderOutStream.str();
+  outStream << std::setfill('0');
+  outStream << std::endl;
+  outStream << std::endl;
   int numberOfFrameBitStreams = bitStreamSequenceNode->GetNumberOfDataNodes();
   for (int frameIndex=0; frameIndex<numberOfFrameBitStreams; frameIndex++)
   {
     vtkMRMLBitStreamNode* frameBitStream = vtkMRMLBitStreamNode::SafeDownCast(bitStreamSequenceNode->GetNthDataNode(frameIndex));
-    if (frameBitStream!=NULL || frameBitStream->GetMessageValid()>0)
+    std::string timeStamp = bitStreamSequenceNode->GetNthIndexValue(frameIndex);
+    if (frameBitStream!=NULL && frameBitStream->GetMessageValid()>0 && timeStamp.size())
     {
-      headerOutStream << frameIndex << std::setw(0);
+      outStream << frameIndex << std::setw(0);
+      std::string timeStamp = bitStreamSequenceNode->GetNthIndexValue(frameIndex);
       char* messageStream = (char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer();
       int messageLength = frameBitStream->GetMessageStreamBuffer()->GetPackSize();
-      headerOutStream.write(messageStream, messageLength);
-      headerOutStream << std::endl;
+      outStream.write(timeStamp.c_str(), timeStamp.size());
+      outStream << std::endl;
+      outStream.write(messageStream, messageLength);
+      outStream << std::endl;
     }
   }
-  headerOutStream.close();
+  
+  outStream.close();
   
   this->StageWriteData(refNode);
   

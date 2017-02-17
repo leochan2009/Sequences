@@ -223,21 +223,13 @@ public:
     int oldModified = target->StartModify();
     vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
-
-    //int length = sourceBitStreamNode->GetMessageStreamLength();
     igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
-    //vtkSmartPointer<vtkImageData> targetImageData = sourceBitStreamNode->GetVectorVolumeNode()->GetImageData();
-    // targetScalarVolumeNode->SetAndObserveTransformNodeID is not called, as we want to keep the currently applied transform
+
     if (!shallowCopy && targetBitStreamNode)
     {
-      //targetBitStreamNode->SetName("MacCamera5_BitStream");
       targetBitStreamNode->SetMessageStream(msgstream);
-      //targetImageData = vtkSmartPointer<vtkImageData>::Take(sourceBitStreamNode->GetVectorVolumeNode()->GetImageData()->NewInstance());
-      //targetImageData->DeepCopy(sourceBitStreamNode->GetVectorVolumeNode()->GetImageData());
-      //targetBitStreamNode->SetVectorVolumeNode(targetVolumeNode); // invokes vtkMRMLVolumeNode::ImageDataModifiedEvent, which is not masked by StartModify
     }
-    //targetBitStreamNode->GetVectorVolumeNode()->SetAndObserveImageData(targetImageData);
     target->EndModify(oldModified);
   }
   
@@ -256,29 +248,6 @@ public:
     }
     target->EndModify(oldModified);
   }
-
-  /*virtual void AddDefaultDisplayNodes(vtkMRMLNode* node)
-  {
-    vtkMRMLVectorVolumeNode* displayableNode = vtkMRMLVectorVolumeNode::SafeDownCast(node);
-    if (displayableNode == NULL)
-    {
-      // not a displayable node, there is nothing to do
-      return;
-    }
-    if (displayableNode->GetDisplayNode())
-    {
-      // there is a display node already
-      return;
-    }
-    displayableNode->CreateDefaultDisplayNodes();
-    
-    // Turn off auto window/level for scalar volumes (it is costly to compute recommended ww/wl and image would appear to be flickering)
-    vtkMRMLVectorVolumeDisplayNode* vectorVolumeDisplayNode = vtkMRMLVectorVolumeDisplayNode::SafeDownCast(displayableNode->GetDisplayNode());
-    if (vectorVolumeDisplayNode)
-    {
-      vectorVolumeDisplayNode->AutoWindowLevelOff();
-    }
-  }*/
 };
 
 
