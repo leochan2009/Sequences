@@ -83,25 +83,6 @@ int vtkMRMLBitStreamSequenceStorageNode::GetTagValue(char* headerString, int hea
   }
 }
 
-std::string vtkMRMLBitStreamSequenceStorageNode::GetValueByDelimiter(std::string &inputString, std::string delimiter, int index)
-{
-  size_t pos = 0;
-  std::string token;
-  int tokenIndex = 0;
-  while ((pos = inputString.find(delimiter)) != std::string::npos) {
-    token = inputString.substr(0, pos);
-    //std::cout << token << std::endl;
-    inputString.erase(0, pos + delimiter.length());
-    tokenIndex++;
-    if (tokenIndex == index)
-    {
-      return token;
-    }
-  }
-  return NULL;
-}
-
-
 //----------------------------------------------------------------------------
 int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
 {
@@ -137,10 +118,10 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
   int temp = 1;
   while(fread(&data[0],2,1,stream)){
     fseek(stream, -1, SEEK_CUR);
-    temp ++;
+    headerLength ++;
     if (strcmp(data.c_str(),"\n\n")==0)
     {
-      headerLength = temp;
+      fseek(stream, -headerLength, SEEK_CUR);
       break;
     }
   }
@@ -181,64 +162,84 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
   {
     fileValid = false;
   }
+  fread(headerString, 2,1,stream); // get rid of the following two line breaks
   if(fileValid)
   {
-    vtkMRMLBitStreamNode * frameProxyNode = vtkMRMLBitStreamNode::New();
-    frameProxyNode->SetUpVolumeAndConverter(volumeName.c_str());
-    char* data= (char *)" ";
-    char* timeStamp = NULL;
-    temp = 0;
-    int dataLength = 0;
-    bool proxyNodeSet = false;
-    bool timeStampFound = false;
-    bool frameMessageFound = false;
-    vtkMRMLBitStreamNode * frameNode;
-    while(fread(&data[0],1,1,stream))
-    {
-      if (strcmp(data,"\n")==0 && dataLength && (!timeStampFound))
-      {
-        timeStamp = new char[dataLength];
-        fseek(stream, -dataLength, SEEK_CUR);
-        fread(timeStamp, dataLength, 1, stream);
-        timeStampFound = true;
-        dataLength = 0;
-        continue;
-      }
-      if (strcmp(data,"\n")==0 && dataLength  && (!frameMessageFound))
-      {
-        if(!proxyNodeSet)
-        {
-          frameNode = frameProxyNode;
-          proxyNodeSet = true;
-        }
-        else
-        {
-          frameNode = vtkMRMLBitStreamNode::New();
-          frameNode->SetVectorVolumeNode(frameProxyNode->GetVectorVolumeNode());
-        }
-        timeStamp = new char[dataLength];
-        fseek(stream, -dataLength, SEEK_CUR);
-        fread(frameNode->GetMessageStreamBuffer()->GetPackPointer(), dataLength, 1, stream);
-        frameMessageFound = true;
-        timeStampFound = false; // time stamp should be found first
-        dataLength = 0;
-        continue;
-      }
-      if(timeStampFound && frameMessageFound)
-      {
-        volSequenceNode->SetDataNodeAtValue(frameNode, std::string(timeStamp));
-        delete timeStamp;
-        timeStamp = NULL;
-        timeStampFound = false;
-        frameMessageFound = false;
-        dataLength = 0;
-      }
-      dataLength++;
-    }
     
+    if(this->GetScene())
+    {
+      std::string nodeName(volumeName);
+      nodeName.append(SEQ_BITSTREAM_POSTFIX);
+      vtkCollection* collection =  this->GetScene()->GetNodesByClassByName("vtkMRMLBitStreamNode",nodeName.c_str());
+      int nCol = collection->GetNumberOfItems();
+      if (nCol > 0)
+      {
+        for (int i = 0; i < nCol; i ++)
+        {
+          this->GetScene()->RemoveNode(vtkMRMLNode::SafeDownCast(collection->GetItemAsObject(i)));
+        }
+      }
+      vtkMRMLBitStreamNode * frameProxyNode = vtkMRMLBitStreamNode::New();
+      this->GetScene()->AddNode(frameProxyNode);
+      frameProxyNode->SetUpVolumeAndConverter(volumeName.c_str());
+      while(1)
+      {
+        temp = 0;
+        int stringLineLength = 0;
+        bool proxyNodeSet = false;
+        data.clear();
+        data = std::string(" ");
+        bool bCanBeRead = true;
+        while(bCanBeRead)
+        {
+          bCanBeRead = fread(&data[0],1,1,stream);
+          stringLineLength++;
+          if (strcmp(data.c_str(),"\n")==0)
+          {
+            fseek(stream, -stringLineLength, SEEK_CUR);
+            break;
+          }
+        }
+        if (!bCanBeRead) break;
+        char *lineString = new char[stringLineLength];
+        fread(lineString,stringLineLength,1,stream);
+        std::string stringOperator(lineString);
+        size_t pos = 0;
+        int messageLength = 0;
+        if ((pos = stringOperator.find(":")) != std::string::npos)
+        {
+          std::string timeStamp(lineString,pos);
+          std::string stringMsgLength(lineString+pos,stringLineLength-pos);
+          stringMsgLength.erase(stringMsgLength.find_last_not_of(" :\t\r\n") + 1);
+          stringMsgLength.erase(0, stringMsgLength.find_first_not_of(" :\t\r\n")); // Get rid of ":"
+          stringMsgLength.erase(0, stringMsgLength.find_first_not_of(" :\t\r\n")); // Get rid of " "
+          messageLength = atoi(stringMsgLength.c_str());
+          igtl::MessageHeader::Pointer headerMsg;
+          headerMsg = igtl::MessageHeader::New();
+          headerMsg->InitPack();
+          fread(headerMsg->GetPackPointer(), IGTL_HEADER_SIZE, 1, stream);
+          headerMsg->Unpack();
+          igtl::MessageBase::Pointer buffer = igtl::MessageBase::New();
+          buffer->SetMessageHeader(headerMsg);
+          buffer->AllocatePack();
+          fread(buffer->GetPackBodyPointer(), buffer->GetPackBodySize(), 1, stream);
+          vtkMRMLBitStreamNode * frameNode;
+          if(!proxyNodeSet)
+          {
+            frameNode = frameProxyNode;
+            proxyNodeSet = true;
+          }
+          else
+          {
+            frameNode = vtkMRMLBitStreamNode::New();
+            frameNode->SetVectorVolumeNode(frameProxyNode->GetVectorVolumeNode());
+          }
+          frameNode->SetMessageStream(buffer);
+          volSequenceNode->SetDataNodeAtValue(frameNode, std::string(timeStamp));
+        }
+      }
+    }
   }
-  
-  
   
   return 1;
 }
@@ -316,13 +317,24 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     std::string timeStamp = bitStreamSequenceNode->GetNthIndexValue(frameIndex);
     if (frameBitStream!=NULL && frameBitStream->GetMessageValid()>0 && timeStamp.size())
     {
-      outStream << frameIndex << std::setw(0);
-      std::string timeStamp = bitStreamSequenceNode->GetNthIndexValue(frameIndex);
       char* messageStream = (char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer();
       int messageLength = frameBitStream->GetMessageStreamBuffer()->GetPackSize();
+      igtl::VideoMessage::Pointer videoMsg = igtl::VideoMessage::New();
+      igtl::MessageBase::Pointer messageBase = frameBitStream->GetMessageStreamBuffer();
+      videoMsg->SetMessageHeader(messageBase);
+      videoMsg->SetBitStreamSize(messageBase->GetBodySizeToRead()-sizeof(igtl_extended_header) -messageBase->GetMetaDataHeaderSize() - messageBase->GetMetaDataSize() - IGTL_VIDEO_HEADER_SIZE);
+      videoMsg->AllocateBuffer();
+      memcpy(videoMsg->GetPackBodyPointer(),(unsigned char*) messageBase->GetPackBodyPointer(),messageBase->GetBodySizeToRead());
+      videoMsg->SetWidth(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[0]);
+      videoMsg->SetHeight(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[1]);
+      videoMsg->SetEndian(igtl_is_little_endian()==true?2:1);
+      videoMsg->SetScalarType(videoMsg->TYPE_UINT8);
+      int unpackStatus = videoMsg->Pack();
       outStream.write(timeStamp.c_str(), timeStamp.size());
+      outStream <<": "<<messageLength+IGTL_HEADER_SIZE;
       outStream << std::endl;
-      outStream.write(messageStream, messageLength);
+      outStream.write((char*)videoMsg->GetPackPointer(), messageLength);
+      //outStream.write(messageStream, messageLength);
       outStream << std::endl;
     }
   }
@@ -338,23 +350,19 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
 //----------------------------------------------------------------------------
 void vtkMRMLBitStreamSequenceStorageNode::InitializeSupportedReadFileTypes()
 {
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.seq.mhd)");
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.seq.mha)");
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.mhd)");
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.mha)");
+  this->SupportedWriteFileTypes->InsertNextValue("Video Bit Stream (.bin)");
+  this->SupportedWriteFileTypes->InsertNextValue("Video Bit Stream (.seq.bin)");
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLBitStreamSequenceStorageNode::InitializeSupportedWriteFileTypes()
 {
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.seq.mhd)");
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.seq.mha)");
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.mhd)");
-  this->SupportedWriteFileTypes->InsertNextValue("Linear transform sequence (.mha)");
+  this->SupportedWriteFileTypes->InsertNextValue("Video Bit Stream (.bin)");
+  this->SupportedWriteFileTypes->InsertNextValue("Video Bit Stream (.seq.bin)");
 }
 
 //----------------------------------------------------------------------------
 const char* vtkMRMLBitStreamSequenceStorageNode::GetDefaultWriteFileExtension()
 {
-  return "seq.mha";
+  return "bin";
 }

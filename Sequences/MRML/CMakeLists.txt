@@ -26,10 +26,10 @@ set(${KIT}_SRCS
   vtkMRMLBitStreamSequenceStorageNode.cxx
   vtkMRMLBitStreamSequenceStorageNode.h
   )
-message("dfaf")
-message("${vtkSlicerOpenIGTLinkIFModuleMRML_SOURCE_DIR}")
-message("${vtkSlicerOpenIGTLinkIFModuleMRML_BINARY_DIR}")
+message("${OpenIGTLink_LIBRARIES}")
+
 set(${KIT}_TARGET_LIBRARIES
+  ${OpenIGTLink_LIBRARIES}
   ${ITK_LIBRARIES}
   ${MRML_LIBRARIES}
   SlicerBaseLogic

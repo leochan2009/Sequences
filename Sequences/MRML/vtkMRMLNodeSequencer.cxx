@@ -229,6 +229,7 @@ public:
     if (!shallowCopy && targetBitStreamNode)
     {
       targetBitStreamNode->SetMessageStream(msgstream);
+      targetBitStreamNode->SetVectorVolumeNode(sourceBitStreamNode->GetVectorVolumeNode());
     }
     target->EndModify(oldModified);
   }
