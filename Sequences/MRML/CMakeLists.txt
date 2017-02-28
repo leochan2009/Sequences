@@ -25,6 +25,8 @@ set(${KIT}_SRCS
   vtkMRMLVolumeSequenceStorageNode.h
   vtkMRMLBitStreamSequenceStorageNode.cxx
   vtkMRMLBitStreamSequenceStorageNode.h
+  vtkMRMLIGTLConnectorSequenceStorageNode.cxx
+  vtkMRMLIGTLConnectorSequenceStorageNode.h
   )
 message("${OpenIGTLink_LIBRARIES}")
 

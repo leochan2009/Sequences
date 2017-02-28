@@ -24,6 +24,8 @@
 #include "vtkMRMLSequenceStorageNode.h"
 #include "vtkMRMLVolumeSequenceStorageNode.h"
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
+#include "vtkMRMLIGTLConnectorSequenceStorageNode.h"
+
 
 // MRML includes
 #include "vtkMRMLScalarVolumeNode.h"
@@ -75,6 +77,7 @@ void vtkSlicerSequencesLogic::RegisterNodes()
   this->GetMRMLScene()->RegisterNodeClass(vtkSmartPointer<vtkMRMLLinearTransformSequenceStorageNode>::New());
   this->GetMRMLScene()->RegisterNodeClass(vtkSmartPointer<vtkMRMLVolumeSequenceStorageNode>::New());
   this->GetMRMLScene()->RegisterNodeClass(vtkSmartPointer<vtkMRMLBitStreamSequenceStorageNode>::New());
+  this->GetMRMLScene()->RegisterNodeClass(vtkSmartPointer<vtkMRMLIGTLConnectorSequenceStorageNode>::New());
 }
 
 //---------------------------------------------------------------------------

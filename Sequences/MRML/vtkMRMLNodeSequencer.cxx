@@ -42,9 +42,11 @@
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
+#include <vtkMutexLock.h>
 
 // OpenIGTLinkIF node include
 #include "vtkMRMLBitStreamNode.h"
+#include "vtkMRMLIGTLConnectorNode.h"
 
 //----------------------------------------------------------------------------
 
@@ -249,6 +251,69 @@ public:
     }
     target->EndModify(oldModified);
   }
+};
+
+
+
+//----------------------------------------------------------------------------
+
+class IGTLConnectorNodeSequencer : public vtkMRMLNodeSequencer::NodeSequencer
+{
+public:
+  IGTLConnectorNodeSequencer()
+  {
+    this->SupportedNodeClassName = "vtkMRMLIGTLConnectorNode";
+    this->RecordingEvents->InsertNextValue(vtkMRMLIGTLConnectorNode::IGTLMessageProcessEvent);
+    //this->RecordingEvents->InsertNextValue(vtkMRMLVolumeNode::ImageDataModifiedEvent);
+    /*this->RecordingEvents->InsertNextValue(vtkMRMLTransformableNode::TransformModifiedEvent);
+    this->RecordingEvents->InsertNextValue(vtkSegmentation::MasterRepresentationModified);
+    this->RecordingEvents->InsertNextValue(vtkMRMLModelNode::PolyDataModifiedEvent);*/
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLDisplayableNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLTransformableNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLStorableNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
+    Mutex = vtkMutexLock::New();
+  }
+  
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  {
+    int oldModified = target->StartModify();
+    vtkMRMLIGTLConnectorNode* targetIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(target);
+    vtkMRMLIGTLConnectorNode* sourceIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(source);
+    targetIGTLConnectorNode->SetScene(sourceIGTLConnectorNode->GetScene());
+    
+    if (!shallowCopy && targetIGTLConnectorNode )
+    {
+      sourceIGTLConnectorNode->Mutex->Lock();
+      if(sourceIGTLConnectorNode->messageLength && sourceIGTLConnectorNode->CurrentIGTLMessage)
+      {
+        targetIGTLConnectorNode->CurrentIGTLMessage = new igtl_uint8[sourceIGTLConnectorNode->messageLength];
+        memcpy(targetIGTLConnectorNode->CurrentIGTLMessage, sourceIGTLConnectorNode->CurrentIGTLMessage, sourceIGTLConnectorNode->messageLength);
+        targetIGTLConnectorNode->messageLength = sourceIGTLConnectorNode->messageLength;
+      }
+      sourceIGTLConnectorNode->Mutex->Unlock();
+    }
+    target->EndModify(oldModified);
+  }
+  
+  virtual void CopyNodeReplay(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false*/ )
+  {
+    int oldModified = target->StartModify();
+    vtkMRMLIGTLConnectorNode* targetIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(target);
+    vtkMRMLIGTLConnectorNode* sourceIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(source);
+    
+    //int length = sourceBitStreamNode->GetMessageStreamLength();
+    igtl_uint8* msgstream = (igtl_uint8* )sourceIGTLConnectorNode->CurrentIGTLMessage;
+    targetIGTLConnectorNode->SetScene(sourceIGTLConnectorNode->GetScene());
+    if (msgstream)
+    {
+      targetIGTLConnectorNode->SetCircularBufferFromSimulation(msgstream);
+      targetIGTLConnectorNode->ImportDataFromCircularBuffer();
+    }
+    target->EndModify(oldModified);
+  }
+  private:
+    vtkMutexLock*  Mutex;
 };
 
 
@@ -636,6 +701,7 @@ vtkMRMLNodeSequencer::vtkMRMLNodeSequencer():Superclass()
   this->RegisterNodeSequencer(new ViewNodeSequencer());
   this->RegisterNodeSequencer(new MarkupsFiducialNodeSequencer());
   this->RegisterNodeSequencer(new BitStreamNodeSequencer());
+  this->RegisterNodeSequencer(new IGTLConnectorNodeSequencer());
 }
 
 //----------------------------------------------------------------------------
