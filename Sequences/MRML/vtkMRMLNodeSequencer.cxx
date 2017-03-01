@@ -272,7 +272,6 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLTransformableNode");
     this->SupportedNodeParentClassNames.push_back("vtkMRMLStorableNode");
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
-    Mutex = vtkMutexLock::New();
   }
   
   virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
@@ -280,7 +279,7 @@ public:
     int oldModified = target->StartModify();
     vtkMRMLIGTLConnectorNode* targetIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(target);
     vtkMRMLIGTLConnectorNode* sourceIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(source);
-    targetIGTLConnectorNode->SetScene(sourceIGTLConnectorNode->GetScene());
+    //targetIGTLConnectorNode->SetScene(sourceIGTLConnectorNode->GetScene());
     
     if (!shallowCopy && targetIGTLConnectorNode )
     {
@@ -304,7 +303,6 @@ public:
     
     //int length = sourceBitStreamNode->GetMessageStreamLength();
     igtl_uint8* msgstream = (igtl_uint8* )sourceIGTLConnectorNode->CurrentIGTLMessage;
-    targetIGTLConnectorNode->SetScene(sourceIGTLConnectorNode->GetScene());
     if (msgstream)
     {
       targetIGTLConnectorNode->SetCircularBufferFromSimulation(msgstream);
