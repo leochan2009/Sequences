@@ -11,12 +11,34 @@
 #include "vtkMRMLIGTLConnectorSequenceStorageNode.h"
 #include "vtkMRMLSequenceNode.h"
 
-#include "vtkMRMLIGTLConnectorNode.h"
 
 #include "vtkObjectFactory.h"
 #include "vtkNew.h"
 #include "vtkStringArray.h"
 #include "vtkCollection.h"
+// VTK includes
+#include <vtkAbstractTransform.h>
+#include <vtkCommand.h>
+#include <vtkImageData.h>
+#include <vtkIntArray.h>
+#include <vtkMatrix4x4.h>
+#include <vtkMRMLCameraNode.h>
+#include <vtkMRMLMarkupsFiducialNode.h>
+#include <vtkMRMLModelNode.h>
+#include <vtkMRMLScalarVolumeDisplayNode.h>
+#include <vtkMRMLSliceCompositeNode.h>
+#include <vtkMRMLSliceNode.h>
+#include <vtkMRMLSegmentationNode.h>
+#include <vtkMRMLTransformNode.h>
+#include <vtkMRMLVectorVolumeDisplayNode.h>
+#include <vtkMRMLViewNode.h>
+#include <vtkMRMLVectorVolumeNode.h>
+#include <vtkMRMLVolumeNode.h>
+#include <vtkNew.h>
+#include <vtkObjectFactory.h>
+#include <vtkPolyData.h>
+#include <vtkMutexLock.h>
+
 
 #include "vtksys/SystemTools.hxx"
 
@@ -195,7 +217,7 @@ int vtkMRMLIGTLConnectorSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNo
         fread(lineString,stringLineLength,1,stream);
         std::string stringOperator(lineString);
         size_t pos = 0;
-        int messageLength = 0;
+        long messageLength = 0;
         if ((pos = stringOperator.find(":")) != std::string::npos)
         {
           std::string timeStamp(lineString,pos);
@@ -214,9 +236,9 @@ int vtkMRMLIGTLConnectorSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNo
           {
             frameNode = vtkMRMLIGTLConnectorNode::New();
           }
-          frameNode->CurrentIGTLMessage = new igtl_uint8[messageLength];
-          fread(frameNode->CurrentIGTLMessage , messageLength, 1, stream);
-          frameNode->messageLength = messageLength;
+          igtl_uint8* IGTLMessage = new igtl_uint8[messageLength];
+          fread(IGTLMessage, messageLength, 1, stream);
+          frameNode->SetCurrentIGTLMessage(IGTLMessage, messageLength);
           volSequenceNode->SetDataNodeAtValue(frameNode, std::string(timeStamp));
         }
       }
@@ -240,8 +262,8 @@ bool vtkMRMLIGTLConnectorSequenceStorageNode::CanWriteFromReferenceNode(vtkMRMLN
     vtkDebugMacro("vtkMRMLIGTLConnectorSequenceStorageNode::CanWriteFromReferenceNode: no data nodes");
     return false;
   }
-  int numberOfFrameVolumes = sequenceNode->GetNumberOfDataNodes();
-  for (int frameIndex = 0; frameIndex < numberOfFrameVolumes; frameIndex++)
+  int numberOfFrameConnectors = sequenceNode->GetNumberOfDataNodes();
+  for (int frameIndex = 0; frameIndex < numberOfFrameConnectors; frameIndex++)
   {
     vtkMRMLIGTLConnectorNode* igtlConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(sequenceNode->GetNthDataNode(frameIndex));
     if (igtlConnectorNode == NULL)
@@ -251,6 +273,25 @@ bool vtkMRMLIGTLConnectorSequenceStorageNode::CanWriteFromReferenceNode(vtkMRMLN
     }
   }
   return true;
+}
+
+int vtkMRMLIGTLConnectorSequenceStorageNode::CheckNodeExist(vtkMRMLScene* scene, vtkIGTLToMRMLBase* converter, igtl::MessageBase::Pointer buffer)
+{
+  const char* classname = scene->GetClassNameByTag(converter->GetMRMLName());
+  vtkCollection* collectiontemp = scene->GetNodesByClassByName(classname, buffer->GetDeviceName());
+  //----------------------
+  //GetNodesByClassByName() is buggy, vtkMRMLVectorVolumeNode.IsA("vtkMRMLScalarVolumeNode") == 1, so when ask for scalar volume, the collection contains a vector volume
+  vtkCollection* collection = vtkCollection::New();
+  for (int i = 0; i < collectiontemp->GetNumberOfItems(); i ++)
+  {
+    vtkMRMLNode* node = vtkMRMLNode::SafeDownCast(collectiontemp->GetItemAsObject(i));
+    if(strcmp(node->GetClassName(),classname)==0)
+    {
+      collection->AddItem(node);
+    }
+  }
+  //-----------------------
+  return collection->GetNumberOfItems();
 }
 
 //----------------------------------------------------------------------------
@@ -275,7 +316,15 @@ int vtkMRMLIGTLConnectorSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refN
   }
   
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string("") || vtksys::SystemTools::FileExists(fullName.c_str()))
+  std::string fileName = fullName.substr(0,fullName.find("."));
+  std::string bitStreamFileName = fileName.append("_bitstream");
+  fileName = fullName.substr(0,fullName.find("."));
+  std::string linearTransformFileName = fileName.append("_tracking");
+  fileName = fullName.substr(0,fullName.find("."));
+  std::string volumeFileName = fileName.append("_volume");
+  if (fullName == std::string("") || vtksys::SystemTools::FileExists(fullName.c_str())
+      || vtksys::SystemTools::FileExists(bitStreamFileName.c_str()) || vtksys::SystemTools::FileExists(linearTransformFileName.c_str())
+      || vtksys::SystemTools::FileExists(volumeFileName.c_str()))
   {
     vtkErrorMacro("WriteData: File name not specified");
     return 0;
@@ -286,37 +335,116 @@ int vtkMRMLIGTLConnectorSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refN
   defaultHeaderOutStream
   << "ObjectType: IGTLConnector" << std::endl
   << "ConnectorName: " << connectorName << std::endl;
-  // Append the bit stream to the end of the file
   std::ofstream outStream(fullName.c_str(), std::ios_base::binary);
   outStream << defaultHeaderOutStream.str();
   outStream << std::setfill('0');
   outStream << std::endl;
   outStream << std::endl;
-  int numberOfFrameBitStreams = igtlConnectorSequenceNode->GetNumberOfDataNodes();
-  for (int frameIndex=0; frameIndex<numberOfFrameBitStreams; frameIndex++)
+  
+  vtkMRMLSequenceNode* transformSequence = vtkMRMLSequenceNode::New();
+  vtkIGTLToMRMLLinearTransform* transformConverter = vtkIGTLToMRMLLinearTransform::New();
+  vtkMRMLTransformNode* transformNode = NULL;
+  vtkMRMLLinearTransformSequenceStorageNode* transformStorageNode = vtkMRMLLinearTransformSequenceStorageNode::New();
+  
+  vtkMRMLSequenceNode* volumeSequence = vtkMRMLSequenceNode::New();
+  vtkIGTLToMRMLImage* imageConverter = vtkIGTLToMRMLImage::New();
+  vtkMRMLVolumeNode* volumeNode = NULL;
+  vtkMRMLVolumeSequenceStorageNode* volumeStorageNode = vtkMRMLVolumeSequenceStorageNode::New();
+  
+  vtkMRMLSequenceNode* bitStreamSequence = vtkMRMLSequenceNode::New();
+  vtkIGTLToMRMLVideo* videoConverter = vtkIGTLToMRMLVideo::New();
+  vtkMRMLVectorVolumeNode* vectorVolumeNode = NULL;
+  vtkMRMLBitStreamNode* bitStreamNode = NULL;
+  vtkMRMLBitStreamSequenceStorageNode* bitStreamStorageNode = vtkMRMLBitStreamSequenceStorageNode::New();
+  bool hasBitStream = false, hasVolume = false, hasTransform=false;
+  int numberOfFrames = igtlConnectorSequenceNode->GetNumberOfDataNodes();
+  for (int frameIndex=0; frameIndex<numberOfFrames; frameIndex++)
   {
     vtkMRMLIGTLConnectorNode* frameIGTLConnector = vtkMRMLIGTLConnectorNode::SafeDownCast(igtlConnectorSequenceNode->GetNthDataNode(frameIndex));
     std::string timeStamp = igtlConnectorSequenceNode->GetNthIndexValue(frameIndex);
-    if (igtlConnectorSequenceNode!=NULL && frameIGTLConnector->CurrentIGTLMessage && timeStamp.size())
+    if (igtlConnectorSequenceNode!=NULL && timeStamp.size())
     {
-      int messageLength = frameIGTLConnector->messageLength;
-      //igtl::MessageBase::Pointer messageTarget = igtl::MessageBase::New();
-      igtl_uint8* message = frameIGTLConnector->CurrentIGTLMessage;
-      //messageTarget->SetMessageHeader(messageBase);
-      //messageTarget->SetBitStreamSize(messageBase->GetBodySizeToRead()-sizeof(igtl_extended_header) -messageBase->GetMetaDataHeaderSize() - messageBase->GetMetaDataSize() - IGTL_VIDEO_HEADER_SIZE);
-      //messageTarget->AllocateBuffer();
-      //memcpy(messageTarget->GetPackBodyPointer(),(unsigned char*) messageBase->GetPackBodyPointer(),messageBase->GetBodySizeToRead());
-      //int packStatus = messageTarget->Pack();
       outStream.write(timeStamp.c_str(), timeStamp.size());
-      outStream <<": "<<messageLength;
+      long messageLen = 0;
+      unsigned char* message  = frameIGTLConnector->ExportCurrentMessage(messageLen);
+      outStream <<": "<<messageLen;
       outStream << std::endl;
-      outStream.write((char*)message, messageLength);
+      outStream.write((char*)message, messageLen);
       outStream << std::endl;
+      igtl::MessageHeader::Pointer headerMsg;
+      headerMsg = igtl::MessageHeader::New();
+      headerMsg->InitPack();
+      if(messageLen && message)
+      {
+        memcpy(headerMsg->GetPackPointer(), message, IGTL_HEADER_SIZE);
+        igtl::MessageBase::Pointer buffer = igtl::MessageBase::New();
+        headerMsg->Unpack();
+        buffer->SetMessageHeader(headerMsg);
+        buffer->AllocatePack();
+        memcpy(buffer->GetPackBodyPointer(), message+IGTL_HEADER_SIZE, buffer->GetPackBodySize());
+        std::string CurrentIGTLMSGType = std::string(headerMsg->GetDeviceType());
+        if (CurrentIGTLMSGType.compare("TDATA")==0)
+        {
+          if (!this->CheckNodeExist(transformSequence->GetSequenceScene(),transformConverter, buffer))
+          {
+            vtkMRMLNode* createdNode =  transformConverter->CreateNewNodeWithMessage(transformSequence->GetSequenceScene(),headerMsg->GetDeviceName(),buffer);
+            transformNode = vtkMRMLTransformNode::SafeDownCast(createdNode);
+          }
+          transformConverter->IGTLToMRML(buffer, transformNode);
+          transformSequence->SetDataNodeAtValue(transformNode, timeStamp);
+          hasTransform = true;
+        }
+        if (CurrentIGTLMSGType.compare("IMAGE")==0)
+        {
+          if (!this->CheckNodeExist(volumeSequence->GetSequenceScene(),transformConverter, buffer))
+          {
+            vtkMRMLNode* createdNode =  imageConverter->CreateNewNodeWithMessage(transformSequence->GetSequenceScene(),headerMsg->GetDeviceName(), buffer);
+            volumeNode = vtkMRMLVolumeNode::SafeDownCast(createdNode);
+          }
+          imageConverter->IGTLToMRML(buffer, volumeNode);
+          volumeSequence->SetDataNodeAtValue(volumeNode, timeStamp);
+          hasVolume = true;
+        }
+        if (CurrentIGTLMSGType.compare("Video")==0)
+        {
+          if (!this->CheckNodeExist(bitStreamSequence->GetSequenceScene(),videoConverter, buffer))
+          {
+            vtkMRMLNode* createdNode =  videoConverter->CreateNewNodeWithMessage(bitStreamSequence->GetSequenceScene(),headerMsg->GetDeviceName(), buffer);
+            vectorVolumeNode = vtkMRMLVectorVolumeNode::SafeDownCast(createdNode);
+            const char* nodeID = vectorVolumeNode->GetAttribute("vtkMRMLVectorVolumeNode.rel_bitStreamID");
+            bitStreamNode = vtkMRMLBitStreamNode::SafeDownCast((bitStreamSequence->GetSequenceScene())->GetNodeByID(nodeID));
+          }
+          videoConverter->IGTLToMRML(buffer, vectorVolumeNode);
+          bitStreamSequence->SetDataNodeAtValue(bitStreamNode, timeStamp);
+          hasBitStream = true;
+        }
+      }
+      delete message;
     }
+  }
+  if(hasTransform)
+  {
+    defaultHeaderOutStream << "LinearTransfromFileName: " << linearTransformFileName << std::endl;
+    std::string fullName = linearTransformFileName.append(".").append(transformStorageNode->GetDefaultWriteFileExtension());
+    transformStorageNode->SetFileName(fullName.c_str());
+    transformStorageNode->WriteDataInternal(transformSequence);
+  }
+  if(hasVolume)
+  {
+    defaultHeaderOutStream << "VolumeFileName: " << volumeFileName << std::endl;
+    std::string fullName = volumeFileName.append(".").append(volumeStorageNode->GetDefaultWriteFileExtension());
+    volumeStorageNode->SetFileName(fullName.c_str());
+    volumeStorageNode->WriteDataInternal(volumeSequence);
+  }
+  if(hasBitStream)
+  {
+    defaultHeaderOutStream << "BitStreamFileName: " << bitStreamFileName << std::endl;
+    std::string fullName = bitStreamFileName.append(".").append(bitStreamStorageNode->GetDefaultWriteFileExtension());
+    bitStreamStorageNode->SetFileName(fullName.c_str());
+    bitStreamStorageNode->WriteDataInternal(bitStreamSequence);
   }
   
   outStream.close();
-  
   this->StageWriteData(refNode);
   
   return 1;
@@ -326,19 +454,19 @@ int vtkMRMLIGTLConnectorSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refN
 //----------------------------------------------------------------------------
 void vtkMRMLIGTLConnectorSequenceStorageNode::InitializeSupportedReadFileTypes()
 {
-  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.bin)");
-  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.seq.bin)");
+  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.igtlbinary)");
+  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.seq.igtlbinary)");
 }
 
 //----------------------------------------------------------------------------
 void vtkMRMLIGTLConnectorSequenceStorageNode::InitializeSupportedWriteFileTypes()
 {
-  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.bin)");
-  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.seq.bin)");
+  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.igtlbinary)");
+  this->SupportedWriteFileTypes->InsertNextValue("IGTLConnector Message Binary (.seq.igtlbinary)");
 }
 
 //----------------------------------------------------------------------------
 const char* vtkMRMLIGTLConnectorSequenceStorageNode::GetDefaultWriteFileExtension()
 {
-  return "bin";
+  return "igtlbinary";
 }

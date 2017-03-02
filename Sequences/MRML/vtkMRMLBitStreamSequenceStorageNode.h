@@ -42,20 +42,19 @@ public:
   /// Return a default file extension for writting
   virtual const char* GetDefaultWriteFileExtension();
   
-protected:
-  vtkMRMLBitStreamSequenceStorageNode();
-  ~vtkMRMLBitStreamSequenceStorageNode();
-  vtkMRMLBitStreamSequenceStorageNode(const vtkMRMLBitStreamSequenceStorageNode&);
-  void operator=(const vtkMRMLBitStreamSequenceStorageNode&);
-  
-  
   virtual int WriteDataInternal(vtkMRMLNode *refNode);
-
+  
   /// Does the actual reading. Returns 1 on success, 0 otherwise.
   /// Returns 0 by default (read not supported).
   /// This implementation delegates most everything to the superclass
   /// but it has an early exit if the file to be read is incompatible.
   virtual int ReadDataInternal(vtkMRMLNode* refNode);
+  
+protected:
+  vtkMRMLBitStreamSequenceStorageNode();
+  ~vtkMRMLBitStreamSequenceStorageNode();
+  vtkMRMLBitStreamSequenceStorageNode(const vtkMRMLBitStreamSequenceStorageNode&);
+  void operator=(const vtkMRMLBitStreamSequenceStorageNode&);
   
   /// Initialize all the supported write file types
   virtual void InitializeSupportedReadFileTypes();

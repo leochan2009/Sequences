@@ -264,10 +264,6 @@ public:
   {
     this->SupportedNodeClassName = "vtkMRMLIGTLConnectorNode";
     this->RecordingEvents->InsertNextValue(vtkMRMLIGTLConnectorNode::IGTLMessageProcessEvent);
-    //this->RecordingEvents->InsertNextValue(vtkMRMLVolumeNode::ImageDataModifiedEvent);
-    /*this->RecordingEvents->InsertNextValue(vtkMRMLTransformableNode::TransformModifiedEvent);
-    this->RecordingEvents->InsertNextValue(vtkSegmentation::MasterRepresentationModified);
-    this->RecordingEvents->InsertNextValue(vtkMRMLModelNode::PolyDataModifiedEvent);*/
     this->SupportedNodeParentClassNames.push_back("vtkMRMLDisplayableNode");
     this->SupportedNodeParentClassNames.push_back("vtkMRMLTransformableNode");
     this->SupportedNodeParentClassNames.push_back("vtkMRMLStorableNode");
@@ -279,18 +275,9 @@ public:
     int oldModified = target->StartModify();
     vtkMRMLIGTLConnectorNode* targetIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(target);
     vtkMRMLIGTLConnectorNode* sourceIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(source);
-    //targetIGTLConnectorNode->SetScene(sourceIGTLConnectorNode->GetScene());
-    
     if (!shallowCopy && targetIGTLConnectorNode )
     {
-      sourceIGTLConnectorNode->Mutex->Lock();
-      if(sourceIGTLConnectorNode->messageLength && sourceIGTLConnectorNode->CurrentIGTLMessage)
-      {
-        targetIGTLConnectorNode->CurrentIGTLMessage = new igtl_uint8[sourceIGTLConnectorNode->messageLength];
-        memcpy(targetIGTLConnectorNode->CurrentIGTLMessage, sourceIGTLConnectorNode->CurrentIGTLMessage, sourceIGTLConnectorNode->messageLength);
-        targetIGTLConnectorNode->messageLength = sourceIGTLConnectorNode->messageLength;
-      }
-      sourceIGTLConnectorNode->Mutex->Unlock();
+      sourceIGTLConnectorNode->CopyCurrentMSGTo(targetIGTLConnectorNode);
     }
     target->EndModify(oldModified);
   }
@@ -300,18 +287,14 @@ public:
     int oldModified = target->StartModify();
     vtkMRMLIGTLConnectorNode* targetIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(target);
     vtkMRMLIGTLConnectorNode* sourceIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(source);
-    
-    //int length = sourceBitStreamNode->GetMessageStreamLength();
-    igtl_uint8* msgstream = (igtl_uint8* )sourceIGTLConnectorNode->CurrentIGTLMessage;
-    if (msgstream)
+    int status = sourceIGTLConnectorNode->CopyCurrentMSGTo(targetIGTLConnectorNode);
+    if (status)
     {
-      targetIGTLConnectorNode->SetCircularBufferFromSimulation(msgstream);
+      targetIGTLConnectorNode->SetCircularBufferFromCurrentMSG();
       targetIGTLConnectorNode->ImportDataFromCircularBuffer();
     }
     target->EndModify(oldModified);
   }
-  private:
-    vtkMutexLock*  Mutex;
 };
 
 

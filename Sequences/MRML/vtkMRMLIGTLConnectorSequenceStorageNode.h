@@ -14,10 +14,19 @@
 #define __vtkMRMLIGTLConnectorSequenceStorageNode_h
 
 #include "vtkSlicerSequencesModuleMRMLExport.h"
-
+#include "vtkMRMLBitStreamSequenceStorageNode.h"
+#include "vtkMRMLVolumeSequenceStorageNode.h"
+#include "vtkMRMLLinearTransformSequenceStorageNode.h"
 #include "vtkMRMLStorageNode.h"
 #include <string>
 
+// OpenIGTLinkIF node include
+#include "vtkIGTLToMRMLBase.h"
+#include "vtkMRMLBitStreamNode.h"
+#include "vtkMRMLIGTLConnectorNode.h"
+#include "vtkIGTLToMRMLLinearTransform.h"
+#include "vtkIGTLToMRMLImage.h"
+#include "vtkIGTLToMRMLVideo.h"
 
 /// \ingroup Slicer_QtModules_Sequences
 class VTK_SLICER_SEQUENCES_MODULE_MRML_EXPORT vtkMRMLIGTLConnectorSequenceStorageNode : public vtkMRMLStorageNode
@@ -42,14 +51,23 @@ public:
   /// Return a default file extension for writting
   virtual const char* GetDefaultWriteFileExtension();
   
+  int CheckNodeExist(vtkMRMLScene* scene, vtkIGTLToMRMLBase* converter, igtl::MessageBase::Pointer buffer);
+  
 protected:
   vtkMRMLIGTLConnectorSequenceStorageNode();
   ~vtkMRMLIGTLConnectorSequenceStorageNode();
   vtkMRMLIGTLConnectorSequenceStorageNode(const vtkMRMLIGTLConnectorSequenceStorageNode&);
   void operator=(const vtkMRMLIGTLConnectorSequenceStorageNode&);
   
+  vtkMRMLLinearTransformSequenceStorageNode* transfromStorageNode;
+  
+  vtkMRMLVolumeSequenceStorageNode* volumeStorageNode;
+  
+  vtkMRMLBitStreamSequenceStorageNode* bitStreamStorageNode;
   
   virtual int WriteDataInternal(vtkMRMLNode *refNode);
+  
+  int WriteTransfromNode();
 
   /// Does the actual reading. Returns 1 on success, 0 otherwise.
   /// Returns 0 by default (read not supported).
