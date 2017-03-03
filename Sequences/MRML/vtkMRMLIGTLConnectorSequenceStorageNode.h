@@ -65,7 +65,7 @@ protected:
   
   vtkMRMLVolumeSequenceStorageNode* volumeStorageNode;
   
-  vtkMRMLBitStreamSequenceStorageNode* bitStreamStorageNode;
+  //vtkMRMLBitStreamSequenceStorageNode* bitStreamStorageNode;
   
   virtual int WriteDataInternal(vtkMRMLNode *refNode);
   

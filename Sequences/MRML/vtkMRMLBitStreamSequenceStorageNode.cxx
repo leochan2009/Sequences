@@ -317,7 +317,6 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     std::string timeStamp = bitStreamSequenceNode->GetNthIndexValue(frameIndex);
     if (frameBitStream!=NULL && frameBitStream->GetMessageValid()>0 && timeStamp.size())
     {
-      char* messageStream = (char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer();
       int messageLength = frameBitStream->GetMessageStreamBuffer()->GetPackSize();
       igtl::VideoMessage::Pointer videoMsg = igtl::VideoMessage::New();
       igtl::MessageBase::Pointer messageBase = frameBitStream->GetMessageStreamBuffer();
@@ -334,7 +333,6 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
       outStream <<": "<<messageLength+IGTL_HEADER_SIZE;
       outStream << std::endl;
       outStream.write((char*)videoMsg->GetPackPointer(), messageLength);
-      //outStream.write(messageStream, messageLength);
       outStream << std::endl;
     }
   }
