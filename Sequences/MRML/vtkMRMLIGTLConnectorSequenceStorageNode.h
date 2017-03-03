@@ -25,6 +25,8 @@
 #include "vtkMRMLBitStreamNode.h"
 #include "vtkMRMLIGTLConnectorNode.h"
 #include "vtkIGTLToMRMLLinearTransform.h"
+#include "vtkIGTLToMRMLTrackingData.h"
+#include "vtkMRMLIGTLTrackingDataBundleNode.h"
 #include "vtkIGTLToMRMLImage.h"
 #include "vtkIGTLToMRMLVideo.h"
 
@@ -51,7 +53,7 @@ public:
   /// Return a default file extension for writting
   virtual const char* GetDefaultWriteFileExtension();
   
-  int CheckNodeExist(vtkMRMLScene* scene, vtkIGTLToMRMLBase* converter, igtl::MessageBase::Pointer buffer);
+  int CheckNodeExist(vtkMRMLScene* scene, const char* classname, igtl::MessageBase::Pointer buffer);
   
 protected:
   vtkMRMLIGTLConnectorSequenceStorageNode();
