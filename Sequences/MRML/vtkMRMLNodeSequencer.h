@@ -26,6 +26,8 @@
 #include <list>
 #include <vector>
 
+#include <vtkMRMLSequenceNode.h>
+
 #include "vtkSlicerSequencesModuleMRMLExport.h"
 
 class vtkMRMLNode;
@@ -50,10 +52,10 @@ public:
   public:
     NodeSequencer();
     virtual ~NodeSequencer();
-    virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy = false);
+    virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy = false, vtkMRMLSequenceNode * SequenceNode = NULL);
     virtual void CopyNodeReplay(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy = false)
     { CopyNode(source, target, shallowCopy);};
-    virtual vtkMRMLNode* DeepCopyNodeToScene(vtkMRMLNode* source, vtkMRMLScene* scene);
+    virtual vtkMRMLNode* DeepCopyNodeToScene(vtkMRMLNode* source, vtkMRMLScene* scene, vtkMRMLSequenceNode * SequenceNode = NULL);
     virtual vtkIntArray* GetRecordingEvents();
     virtual std::string GetSupportedNodeClassName();
     virtual bool IsNodeSupported(vtkMRMLNode* node);

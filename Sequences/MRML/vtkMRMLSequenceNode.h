@@ -144,6 +144,16 @@ public:
     TextIndex,
     NumberOfIndexTypes // this line must be the last one
   };
+  
+  void SetRecordMRMLNodeMessage(bool flag)
+  {
+    this->RecordMRMLNodeMessage = flag;
+  };
+  
+  bool GetRecordMRMLNodeMessage()
+  {
+    return this->RecordMRMLNodeMessage;
+  };
 
 protected:
   vtkMRMLSequenceNode();
@@ -163,6 +173,8 @@ protected:
     vtkMRMLNode* DataNode;
     std::string DataNodeID; // only used temporarily, during scene load
   };
+  
+  bool RecordMRMLNodeMessage;
 
 protected:
 

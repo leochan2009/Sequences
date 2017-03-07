@@ -54,6 +54,7 @@ vtkMRMLSequenceNode::vtkMRMLSequenceNode()
   this->SetIndexUnit("s");
   this->HideFromEditorsOff();
   this->SequenceScene=vtkMRMLScene::New();
+  this->RecordMRMLNodeMessage = false;
 }
 
 //----------------------------------------------------------------------------
@@ -309,7 +310,10 @@ bool vtkMRMLSequenceNode::UpdateDataNodeAtValue(vtkMRMLNode* node, const std::st
     return false;
   }
   std::string originalName = (nodeToBeUpdated->GetName() ? nodeToBeUpdated->GetName() : "");
-  vtkMRMLNodeSequencer::GetInstance()->GetNodeSequencer(node)->CopyNode(node, nodeToBeUpdated, shallowCopy);
+  
+  vtkMRMLNodeSequencer::NodeSequencer* sequencer = vtkMRMLNodeSequencer::GetInstance()->GetNodeSequencer(node);
+  
+  sequencer->CopyNode(node, nodeToBeUpdated, shallowCopy, this);
   if (!originalName.empty())
   {
     // Restore original name to prevent changing of node name in the sequence node
@@ -353,7 +357,7 @@ vtkMRMLNode* vtkMRMLSequenceNode::SetDataNodeAtValue(vtkMRMLNode* node, const st
   }
 
   // Add a copy of the node to the sequence's scene
-  vtkMRMLNode* newNode = vtkMRMLNodeSequencer::GetInstance()->GetNodeSequencer(node)->DeepCopyNodeToScene(node, this->SequenceScene);
+  vtkMRMLNode* newNode = vtkMRMLNodeSequencer::GetInstance()->GetNodeSequencer(node)->DeepCopyNodeToScene(node, this->SequenceScene,this);
   int seqItemIndex = this->GetItemNumberFromIndexValue(indexValue);
   if (seqItemIndex<0)
   {

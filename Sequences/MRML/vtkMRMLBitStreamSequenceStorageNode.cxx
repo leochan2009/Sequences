@@ -318,22 +318,47 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     if (frameBitStream!=NULL && frameBitStream->GetMessageValid()>0 && timeStamp.size())
     {
       int messageLength = frameBitStream->GetMessageStreamBuffer()->GetPackSize();
-      igtl::VideoMessage::Pointer videoMsg = igtl::VideoMessage::New();
+      
       igtl::MessageBase::Pointer messageBase = frameBitStream->GetMessageStreamBuffer();
-      videoMsg->SetMessageHeader(messageBase);
-      videoMsg->SetBitStreamSize(messageBase->GetBodySizeToRead()-sizeof(igtl_extended_header) -messageBase->GetMetaDataHeaderSize() - messageBase->GetMetaDataSize() - IGTL_VIDEO_HEADER_SIZE);
-      videoMsg->AllocateBuffer();
-      memcpy(videoMsg->GetPackBodyPointer(),(unsigned char*) messageBase->GetPackBodyPointer(),messageBase->GetBodySizeToRead());
-      videoMsg->SetWidth(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[0]);
-      videoMsg->SetHeight(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[1]);
-      videoMsg->SetEndian(igtl_is_little_endian()==true?2:1);
-      videoMsg->SetScalarType(videoMsg->TYPE_UINT8);
-      int unpackStatus = videoMsg->Pack();
-      outStream.write(timeStamp.c_str(), timeStamp.size());
-      outStream <<": "<<messageLength+IGTL_HEADER_SIZE;
-      outStream << std::endl;
-      outStream.write((char*)videoMsg->GetPackPointer(), messageLength);
-      outStream << std::endl;
+      if(strcmp(messageBase->GetDeviceType(),"Video")==0)
+      {
+        igtl::VideoMessage::Pointer videoMsg = igtl::VideoMessage::New();
+        videoMsg->SetMessageHeader(messageBase);
+        videoMsg->SetBitStreamSize(messageBase->GetBodySizeToRead()-sizeof(igtl_extended_header) -messageBase->GetMetaDataHeaderSize() - messageBase->GetMetaDataSize() - IGTL_VIDEO_HEADER_SIZE);
+        videoMsg->AllocateBuffer();
+        memcpy(videoMsg->GetPackBodyPointer(),(unsigned char*) messageBase->GetPackBodyPointer(),messageBase->GetBodySizeToRead());
+        videoMsg->SetWidth(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[0]);
+        videoMsg->SetHeight(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[1]);
+        videoMsg->SetEndian(igtl_is_little_endian()==true?2:1);
+        videoMsg->SetScalarType(videoMsg->TYPE_UINT8);
+        int unpackStatus = videoMsg->Pack();
+        outStream.write(timeStamp.c_str(), timeStamp.size());
+        outStream <<": "<<messageLength;
+        outStream << std::endl;
+        outStream.write((char*)videoMsg->GetPackPointer(), messageLength);
+        outStream << std::endl;
+      }
+      else if(strcmp(messageBase->GetDeviceType(),"IMAGE")==0)
+      {
+        igtl::ImageMessage::Pointer imageMsg = igtl::ImageMessage::New();
+        imageMsg->SetMessageHeader(messageBase);
+        imageMsg->AllocateScalars();
+        memcpy(imageMsg->GetScalarPointer(),(unsigned char*) messageBase->GetPackBodyPointer(),messageBase->GetBodySizeToRead());
+        int   size[]     = {frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[0], frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[1], 1};       // image dimension
+        imageMsg->SetDimensions(size);
+        imageMsg->SetDeviceName(messageBase->GetDeviceName());
+        imageMsg->SetNumComponents(3);
+        imageMsg->SetEndian(igtl_is_little_endian()==true?2:1);
+        imageMsg->SetScalarType(imageMsg->TYPE_UINT8);
+        imageMsg->SetMessageHeader(messageBase);
+        imageMsg->AllocateScalars();
+        int unpackStatus = imageMsg->Pack();
+        outStream.write(timeStamp.c_str(), timeStamp.size());
+        outStream <<": "<<messageLength;
+        outStream << std::endl;
+        outStream.write((char*)imageMsg->GetPackPointer(), messageLength);
+        outStream << std::endl;
+      }
     }
   }
   

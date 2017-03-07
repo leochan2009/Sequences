@@ -97,12 +97,12 @@ bool vtkMRMLNodeSequencer::NodeSequencer::IsNodeSupported(const std::string& nod
   return false;
 }
 
-void vtkMRMLNodeSequencer::NodeSequencer::CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool vtkNotUsed(shallowCopy) /* =false */)
+void vtkMRMLNodeSequencer::NodeSequencer::CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool vtkNotUsed(shallowCopy) /* =false */,vtkMRMLSequenceNode* sequenceNode /* = NULL */ )
 {
   target->CopyWithSingleModifiedEvent(source);
 }
 
-vtkMRMLNode* vtkMRMLNodeSequencer::NodeSequencer::DeepCopyNodeToScene(vtkMRMLNode* source, vtkMRMLScene* scene)
+vtkMRMLNode* vtkMRMLNodeSequencer::NodeSequencer::DeepCopyNodeToScene(vtkMRMLNode* source, vtkMRMLScene* scene, vtkMRMLSequenceNode* sequenceNode)
 {
   if (source == NULL)
   {
@@ -121,7 +121,7 @@ vtkMRMLNode* vtkMRMLNodeSequencer::NodeSequencer::DeepCopyNodeToScene(vtkMRMLNod
   std::string newNodeName = scene->GetUniqueNameByString(baseName.c_str());
 
   vtkSmartPointer<vtkMRMLNode> target = vtkSmartPointer<vtkMRMLNode>::Take(source->CreateNodeInstance());
-  this->CopyNode(source, target, false);
+  this->CopyNode(source, target, false, sequenceNode);
 
   // Make sure all the node names in the sequence's scene are unique for saving purposes
   // TODO: it would be better to make sure all names are unique when saving the data?
@@ -159,7 +159,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLVolumeNode* targetVolumeNode = vtkMRMLVolumeNode::SafeDownCast(target);
@@ -220,17 +220,57 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
   
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
-    igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
-    targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
-
-    if (!shallowCopy && targetBitStreamNode)
+    
+    if (!shallowCopy && targetBitStreamNode && sequenceNode)
     {
-      targetBitStreamNode->SetMessageStream(msgstream);
+      igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
+      
+      //targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
+      if(sequenceNode->GetRecordMRMLNodeMessage()==false)
+      {
+        targetBitStreamNode->SetMessageStream(msgstream);
+      }
+      else
+      {
+        vtkMRMLVectorVolumeNode* imageVolume = sourceBitStreamNode->GetVectorVolumeNode();
+        vtkImageData* imageData = imageVolume->GetImageData();
+        //------------------------------------------------------------
+        // Create a new IMAGE type message
+        int32_t Width = imageData->GetDimensions()[0];
+        int32_t Height = imageData->GetDimensions()[1];
+        int   size[]     = {Width, Height, 1};       // image dimension
+        igtl::ImageMessage::Pointer imgMsg = targetBitStreamNode->GetImageMessageBuffer();
+        imgMsg->SetDimensions(size);
+        imgMsg->SetScalarType(igtl::ImageMessage::TYPE_UINT8);
+        imgMsg->SetDeviceName(msgstream->GetDeviceName());
+        imgMsg->SetNumComponents(3);
+        imgMsg->SetMessageHeader(msgstream); // Use the original message header to keep the time stamps information.
+        imgMsg->AllocateScalars();
+        memcpy(imgMsg->GetScalarPointer(), (unsigned char*) imageData->GetScalarPointer(), imgMsg->GetImageSize());
+        imgMsg->Pack();
+        igtl::MessageBase::Pointer messageBuffer = targetBitStreamNode->GetMessageStreamBuffer();
+        igtl::MessageHeader::Pointer header = igtl::MessageHeader::New();
+        header->SetMessageHeader(imgMsg);
+        header->Unpack();
+        messageBuffer->SetMessageHeader(header);
+        messageBuffer->AllocateBuffer();
+        memcpy(messageBuffer->GetPackBodyPointer(), imgMsg->GetPackBodyPointer(), imgMsg->GetPackBodySize());
+        /*messageBuffer->SetMessageHeader(imgMsg);
+        int test = messageBuffer->GetBodySizeToRead();
+        messageBuffer->AllocateBuffer();
+        memcpy(messageBuffer->GetPackBodyPointer(), imgMsg->GetPackBodyPointer(), imgMsg->GetPackBodySize());
+        memcpy(messageBuffer->GetPackBodyPointer(), (unsigned char*) imgMsg->GetPackBodyPointer(), imgMsg->GetPackBodySize());*/
+        targetBitStreamNode->SetMessageValid(true);
+        if(sourceBitStreamNode->GetKeyFrameDecodedFlag())
+        {
+          sequenceNode->SetRecordMRMLNodeMessage(false);
+        }
+      }
       targetBitStreamNode->SetVectorVolumeNode(sourceBitStreamNode->GetVectorVolumeNode());
     }
     target->EndModify(oldModified);
@@ -244,7 +284,7 @@ public:
     
     //int length = sourceBitStreamNode->GetMessageStreamLength();
     igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
-    targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
+    //targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
     if (strcmp(targetBitStreamNode->GetName(),sourceBitStreamNode->GetName())!=0)
     {
       targetBitStreamNode->DecodeMessageStream(msgstream);
@@ -270,7 +310,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
   
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLIGTLConnectorNode* targetIGTLConnectorNode = vtkMRMLIGTLConnectorNode::SafeDownCast(target);
@@ -314,7 +354,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLVolumeNode* targetVolumeNode = vtkMRMLVolumeNode::SafeDownCast(target);
@@ -373,7 +413,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */ , vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLSegmentationNode* targetSegmentationNode = vtkMRMLSegmentationNode::SafeDownCast(target);
@@ -405,7 +445,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */ , vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLTransformNode* targetTransformNode = vtkMRMLTransformNode::SafeDownCast(target);
@@ -442,7 +482,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     int oldModified = target->StartModify();
     vtkMRMLModelNode* targetModelNode = vtkMRMLModelNode::SafeDownCast(target);
@@ -469,7 +509,7 @@ public:
     this->SupportedNodeClassName = "vtkMRMLSliceCompositeNode";
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     // Singleton node, therefore we cannot use the default Copy() method
     vtkMRMLSliceCompositeNode* targetNode = vtkMRMLSliceCompositeNode::SafeDownCast(target);
@@ -517,7 +557,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     // Don't copy with single-modified-event
     // TODO: check if default behavior is really not correct
@@ -543,7 +583,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     vtkMRMLCameraNode* targetCameraNode = vtkMRMLCameraNode::SafeDownCast(target);
     vtkMRMLCameraNode* sourceCameraNode = vtkMRMLCameraNode::SafeDownCast(source);
@@ -574,7 +614,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     // Singleton node, therefore we cannot use the default Copy() method
     vtkMRMLSliceNode* targetSliceNode = vtkMRMLSliceNode::SafeDownCast(target);
@@ -615,7 +655,7 @@ public:
     this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
   }
 
-  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */, vtkMRMLSequenceNode* sequenceNode /* = NULL */)
   {
     vtkMRMLViewNode* targetNode = vtkMRMLViewNode::SafeDownCast(target);
     vtkMRMLViewNode* sourceNode = vtkMRMLViewNode::SafeDownCast(source);

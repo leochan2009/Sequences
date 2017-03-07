@@ -912,6 +912,11 @@ void vtkMRMLSequenceBrowserNode::SetRecordingActive(bool recording)
   }
   if (this->RecordingActive!=recording)
   {
+    if(RecordingActive==false)
+    {
+      vtkMRMLSequenceNode* sequenceNode = this->GetMasterSequenceNode();//GetSupportedNodeClassName().
+      sequenceNode->SetRecordMRMLNodeMessage(true);
+    }
     this->RecordingActive = recording;
     this->Modified();
   }
