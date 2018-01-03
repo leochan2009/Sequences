@@ -10,8 +10,9 @@
 
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
 #include "vtkMRMLSequenceNode.h"
-
+#include "vtkMRMLScene.h"
 #include "vtkMRMLBitStreamNode.h"
+#include <vtkCollection.h>
 
 #include "vtkObjectFactory.h"
 #include "vtkNew.h"
@@ -170,7 +171,9 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
     {
       std::string nodeName(volumeName);
       nodeName.append(SEQ_BITSTREAM_POSTFIX);
-      vtkCollection* collection =  this->GetScene()->GetNodesByClassByName("vtkMRMLBitStreamNode",nodeName.c_str());
+      vtkCollection* collection =  NULL;
+      vtkMRMLScene* scene = this->GetScene();
+      collection = scene->GetNodesByClassByName("vtkMRMLBitStreamNode",nodeName.c_str());
       int nCol = collection->GetNumberOfItems();
       if (nCol > 0)
       {
@@ -181,7 +184,7 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
       }
       vtkMRMLBitStreamNode * frameProxyNode = vtkMRMLBitStreamNode::New();
       this->GetScene()->AddNode(frameProxyNode);
-      frameProxyNode->SetUpVolumeAndConverter(volumeName.c_str());
+      frameProxyNode->SetUpVolumeAndVideoDeviceByName(volumeName.c_str());
       while(1)
       {
         temp = 0;
@@ -214,15 +217,11 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
           stringMsgLength.erase(0, stringMsgLength.find_first_not_of(" :\t\r\n")); // Get rid of ":"
           stringMsgLength.erase(0, stringMsgLength.find_first_not_of(" :\t\r\n")); // Get rid of " "
           messageLength = atoi(stringMsgLength.c_str());
-          igtl::MessageHeader::Pointer headerMsg;
-          headerMsg = igtl::MessageHeader::New();
-          headerMsg->InitPack();
-          fread(headerMsg->GetPackPointer(), IGTL_HEADER_SIZE, 1, stream);
-          headerMsg->Unpack();
-          igtl::MessageBase::Pointer buffer = igtl::MessageBase::New();
-          buffer->SetMessageHeader(headerMsg);
-          buffer->AllocatePack();
-          fread(buffer->GetPackBodyPointer(), buffer->GetPackBodySize(), 1, stream);
+          igtl::VideoMessage::Pointer buffer = igtl::VideoMessage::New();
+          buffer->SetBitStreamSize(messageLength-IGTL_HEADER_SIZE-IGTL_VIDEO_HEADER_SIZE); // Assuming no meta info data
+          buffer->AllocateBuffer();
+          buffer->SetDeviceType("VIDEO");
+          fread(buffer->GetPackPointer(), messageLength, 1, stream);
           vtkMRMLBitStreamNode * frameNode;
           if(!proxyNodeSet)
           {
@@ -292,7 +291,7 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     volumeName = frameBitStream->GetVectorVolumeNode()->GetName();
   }
   std::string fullName = this->GetFullNameFromFileName();
-  if (fullName == std::string("") || vtksys::SystemTools::FileExists(fullName.c_str()))
+  if (fullName == std::string(""))
   {
     vtkErrorMacro("WriteData: File name not specified");
     return 0;
@@ -317,24 +316,12 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     std::string timeStamp = bitStreamSequenceNode->GetNthIndexValue(frameIndex);
     if (frameBitStream!=NULL && frameBitStream->GetMessageValid()>0 && timeStamp.size())
     {
-      char* messageStream = (char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer();
-      int messageLength = frameBitStream->GetMessageStreamBuffer()->GetPackSize();
-      igtl::VideoMessage::Pointer videoMsg = igtl::VideoMessage::New();
-      igtl::MessageBase::Pointer messageBase = frameBitStream->GetMessageStreamBuffer();
-      videoMsg->SetMessageHeader(messageBase);
-      videoMsg->SetBitStreamSize(messageBase->GetBodySizeToRead()-sizeof(igtl_extended_header) -messageBase->GetMetaDataHeaderSize() - messageBase->GetMetaDataSize() - IGTL_VIDEO_HEADER_SIZE);
-      videoMsg->AllocateBuffer();
-      memcpy(videoMsg->GetPackBodyPointer(),(unsigned char*) messageBase->GetPackBodyPointer(),messageBase->GetBodySizeToRead());
-      videoMsg->SetWidth(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[0]);
-      videoMsg->SetHeight(frameBitStream->GetVectorVolumeNode()->GetImageData()->GetDimensions()[1]);
-      videoMsg->SetEndian(igtl_is_little_endian()==true?2:1);
-      videoMsg->SetScalarType(videoMsg->TYPE_UINT8);
-      int unpackStatus = videoMsg->Pack();
+      igtl::VideoMessage::Pointer frameMsg = frameBitStream->GetMessageStreamBuffer();
+      int messageLength = frameMsg->GetPackSize();
       outStream.write(timeStamp.c_str(), timeStamp.size());
-      outStream <<": "<<messageLength+IGTL_HEADER_SIZE;
+      outStream <<": "<<messageLength;
       outStream << std::endl;
-      outStream.write((char*)videoMsg->GetPackPointer(), messageLength);
-      //outStream.write(messageStream, messageLength);
+      outStream.write((char*)frameMsg->GetPackPointer(), messageLength);
       outStream << std::endl;
     }
   }

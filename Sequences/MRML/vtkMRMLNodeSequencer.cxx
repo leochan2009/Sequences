@@ -223,7 +223,7 @@ public:
     int oldModified = target->StartModify();
     vtkMRMLBitStreamNode* targetBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(target);
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
-    igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
+    igtl::VideoMessage::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
 
     if (!shallowCopy && targetBitStreamNode)
@@ -241,12 +241,16 @@ public:
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
     
     //int length = sourceBitStreamNode->GetMessageStreamLength();
-    igtl::MessageBase::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
-    targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
-    if (strcmp(targetBitStreamNode->GetName(),sourceBitStreamNode->GetName())!=0)
-    {
-      targetBitStreamNode->DecodeMessageStream(msgstream);
-    }
+    igtl::VideoMessage::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
+    igtl::MessageHeader::Pointer headerMsg = igtl::MessageHeader::New();
+    headerMsg->InitPack();
+    memcpy(headerMsg->GetPackPointer(), msgstream->GetPackPointer(), IGTL_HEADER_SIZE);
+    headerMsg->Unpack();
+    igtl::VideoMessage::Pointer buffer = igtl::VideoMessage::New();
+    buffer->SetMessageHeader(headerMsg);
+    buffer->AllocatePack();
+    memcpy(buffer->GetPackBodyPointer(), msgstream->GetPackBodyPointer(), msgstream->GetPackBodySize());
+    targetBitStreamNode->DecodeMessageStream(buffer);
     target->EndModify(oldModified);
   }
 };
