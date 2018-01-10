@@ -75,7 +75,8 @@ bool vtkMRMLNodeSequencer::NodeSequencer::IsNodeSupported(vtkMRMLNode* node)
   {
     return false;
   }
-  return node->IsA(this->SupportedNodeClassName.c_str());
+  //return node->IsA(this->SupportedNodeClassName.c_str());
+  return strcmp(node->GetClassName(), this->SupportedNodeClassName.c_str())== 0;
 }
 
 bool vtkMRMLNodeSequencer::NodeSequencer::IsNodeSupported(const std::string& nodeClassName)
@@ -226,11 +227,13 @@ public:
     igtl::VideoMessage::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
 
-    if (!shallowCopy && targetBitStreamNode)
-    {
+    if (!shallowCopy && targetBitStreamNode && !sourceBitStreamNode->GetIsCopied())
+      {
+      std::cout<<msgstream->GetPackSize()<<std::endl;
+      targetBitStreamNode->SetCodecName(sourceBitStreamNode->GetCodecName());
       targetBitStreamNode->SetMessageStream(msgstream);
-      targetBitStreamNode->SetVectorVolumeNode(sourceBitStreamNode->GetVectorVolumeNode());
-    }
+      sourceBitStreamNode->SetIsCopied(true);
+      }
     target->EndModify(oldModified);
   }
   
@@ -242,15 +245,15 @@ public:
     
     //int length = sourceBitStreamNode->GetMessageStreamLength();
     igtl::VideoMessage::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
-    igtl::MessageHeader::Pointer headerMsg = igtl::MessageHeader::New();
+    /*igtl::MessageHeader::Pointer headerMsg = igtl::MessageHeader::New();
     headerMsg->InitPack();
     memcpy(headerMsg->GetPackPointer(), msgstream->GetPackPointer(), IGTL_HEADER_SIZE);
     headerMsg->Unpack();
     igtl::VideoMessage::Pointer buffer = igtl::VideoMessage::New();
     buffer->SetMessageHeader(headerMsg);
     buffer->AllocatePack();
-    memcpy(buffer->GetPackBodyPointer(), msgstream->GetPackBodyPointer(), msgstream->GetPackBodySize());
-    targetBitStreamNode->DecodeMessageStream(buffer);
+    memcpy(buffer->GetPackBodyPointer(), msgstream->GetPackBodyPointer(), msgstream->GetPackBodySize());*/
+    targetBitStreamNode->DecodeMessageStream(msgstream);
     target->EndModify(oldModified);
   }
 };
