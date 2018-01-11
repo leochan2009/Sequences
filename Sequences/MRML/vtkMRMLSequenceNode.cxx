@@ -22,6 +22,7 @@
 #include "vtkMRMLSequenceStorageNode.h"
 #include "vtkMRMLVolumeSequenceStorageNode.h"
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
+#include "vtkMRMLBitStreamNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -60,6 +61,17 @@ vtkMRMLSequenceNode::~vtkMRMLSequenceNode()
 {
   this->SequenceScene->Delete();
   this->SequenceScene=NULL;
+}
+
+
+void vtkMRMLSequenceNode::ResetReplayNodeStatus(int nodeIndex, vtkMRMLNode* proxyNode)
+{
+  if(strcmp(this->GetDataNodeClassName().c_str(), "vtkMRMLBitStreamNode")==0)
+    {
+    vtkMRMLBitStreamNode* bitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(proxyNode);
+    if (bitStreamNode != NULL)
+      bitStreamNode->SetKeyFrameDecoded(false);
+    }
 }
 
 //----------------------------------------------------------------------------

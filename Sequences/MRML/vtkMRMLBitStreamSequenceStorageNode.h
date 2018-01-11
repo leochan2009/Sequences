@@ -65,6 +65,9 @@ protected:
   
   /// String Operation
   int GetTagValue(char* headerString, int headerLenght, const char* tag, int tagLength, std::string &tagValueString, int&tagValueLength);
+  
+  /// String Operation
+  int ReadElementsInSingleLine(std::string& firstElement, std::string& secondElement, FILE* stream);
 };
 
 #endif

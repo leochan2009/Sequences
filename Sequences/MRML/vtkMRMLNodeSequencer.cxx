@@ -232,9 +232,11 @@ public:
       std::cout<<msgstream->GetPackSize()<<std::endl;
       targetBitStreamNode->SetCodecName(sourceBitStreamNode->GetCodecName());
       targetBitStreamNode->SetMessageStream(msgstream);
+      targetBitStreamNode->SetKeyFrameStream(sourceBitStreamNode->GetKeyFrameStream());
+      targetBitStreamNode->SetKeyFrameUpdated(sourceBitStreamNode->GetKeyFrameUpdated());
       sourceBitStreamNode->SetIsCopied(true);
+      target->EndModify(oldModified);
       }
-    target->EndModify(oldModified);
   }
   
   virtual void CopyNodeReplay(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false*/ )
@@ -245,14 +247,12 @@ public:
     
     //int length = sourceBitStreamNode->GetMessageStreamLength();
     igtl::VideoMessage::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
-    /*igtl::MessageHeader::Pointer headerMsg = igtl::MessageHeader::New();
-    headerMsg->InitPack();
-    memcpy(headerMsg->GetPackPointer(), msgstream->GetPackPointer(), IGTL_HEADER_SIZE);
-    headerMsg->Unpack();
-    igtl::VideoMessage::Pointer buffer = igtl::VideoMessage::New();
-    buffer->SetMessageHeader(headerMsg);
-    buffer->AllocatePack();
-    memcpy(buffer->GetPackBodyPointer(), msgstream->GetPackBodyPointer(), msgstream->GetPackBodySize());*/
+    if(!targetBitStreamNode->GetKeyFrameDecoded())
+      {
+      targetBitStreamNode->SetKeyFrameDecoded(true);
+      targetBitStreamNode->SetKeyFrameStream(sourceBitStreamNode->GetKeyFrameStream());
+      targetBitStreamNode->DecodeMessageStream(targetBitStreamNode->GetKeyFrameStream());
+      }
     targetBitStreamNode->DecodeMessageStream(msgstream);
     target->EndModify(oldModified);
   }
