@@ -46,7 +46,7 @@
 #include <vtkPolyData.h>
 
 // OpenIGTLinkIF node include
-#include "MRML/vtkMRMLBitStreamNode.h"
+#include "vtkMRMLBitStreamNode.h"
 
 //----------------------------------------------------------------------------
 

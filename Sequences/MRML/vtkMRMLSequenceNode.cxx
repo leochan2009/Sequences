@@ -22,7 +22,7 @@
 #include "vtkMRMLSequenceStorageNode.h"
 #include "vtkMRMLVolumeSequenceStorageNode.h"
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
-#include "MRML/vtkMRMLBitStreamNode.h"
+#include "vtkMRMLBitStreamNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>

@@ -8,7 +8,7 @@ include_directories(BEFORE ${vtkTeem_INCLUDE_DIRS})
 set(${KIT}_INCLUDE_DIRECTORIES
   ${Slicer_Base_INCLUDE_DIRS}
   ${OpenIGTLinkIO_INCLUDE_DIRS}
-  ${qSlicerOpenIGTLinkIFModule_INCLUDE_DIRS}
+  ${vtkSlicerOpenIGTLinkIFModuleMRML_INCLUDE_DIRS}
   )
 
 set(${KIT}_SRCS
