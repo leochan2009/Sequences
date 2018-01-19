@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.9)
+cmake_minimum_required(VERSION 3.5)
 
 project(Sequences)
 
@@ -21,14 +21,15 @@ OPTION(SEQUENCES_ENABLE_EXPERIMENTAL_MODULES "Enable the building of work-in-pro
 add_subdirectory(Sequences)
 add_subdirectory(SequenceBrowser)
 add_subdirectory(MetafileImporter)
+add_subdirectory(SequenceSampleData)
 
 if (SEQUENCES_ENABLE_EXPERIMENTAL_MODULES)
   # In development
-  add_subdirectory(SequenceRegistration)
   add_subdirectory(SequenceLabelStatistics)
   add_subdirectory(SequenceResample)
   #add_subdirectory(SequenceGaussianBlurImageFilter)
 endif()
 
 #-----------------------------------------------------------------------------
+include(${Slicer_EXTENSION_GENERATE_CONFIG})
 include(${Slicer_EXTENSION_CPACK})

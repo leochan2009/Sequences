@@ -22,7 +22,7 @@
 #include "vtkMRMLSequenceStorageNode.h"
 #include "vtkMRMLVolumeSequenceStorageNode.h"
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
-#include "vtkMRMLBitStreamNode.h"
+#include "MRML/vtkMRMLBitStreamNode.h"
 
 // MRML includes
 #include <vtkMRMLScene.h>
@@ -41,8 +41,23 @@
 
 #define SAFE_CHAR_POINTER(unsafeString) ( unsafeString==NULL?"":unsafeString )
 
+// This macro sets a member variable and sets both this node and the storage node as modified.
+// This macro can be used for properties that are stored in both the scene and in the stored file.
+#define vtkCxxSetVariableInDataAndStorageNodeMacro(name, type) \
+  void vtkMRMLSequenceNode::Set##name(type arg) \
+  { \
+    if (arg == this->name) { return; } \
+    this->name = arg; \
+    this->StorableModifiedTime.Modified(); \
+    this->Modified(); \
+  }
+
 //------------------------------------------------------------------------------
 vtkMRMLNodeNewMacro(vtkMRMLSequenceNode);
+vtkCxxSetVariableInDataAndStorageNodeMacro(IndexName, const std::string&);
+vtkCxxSetVariableInDataAndStorageNodeMacro(IndexUnit, const std::string&);
+vtkCxxSetVariableInDataAndStorageNodeMacro(IndexType, int);
+vtkCxxSetVariableInDataAndStorageNodeMacro(NumericIndexValueTolerance, double);
 
 //----------------------------------------------------------------------------
 vtkMRMLSequenceNode::vtkMRMLSequenceNode()
@@ -92,20 +107,11 @@ void vtkMRMLSequenceNode::WriteXML(ostream& of, int nIndent)
   // Write all MRML node attributes into output stream
   vtkIndent indent(nIndent);
 
-  if (!this->IndexName.empty())
-  {
-    of << indent << " indexName=\"" << this->IndexName << "\"";
-  }
-  if (!this->IndexUnit.empty())
-  {
-    of << indent << " indexUnit=\"" << this->IndexUnit << "\"";
-  }
+  of << indent << " indexName=\"" << this->IndexName << "\"";
+  of << indent << " indexUnit=\"" << this->IndexUnit << "\"";
 
   std::string indexTypeString=GetIndexTypeAsString();
-  if (!indexTypeString.empty())
-  {    
-    of << indent << " indexType=\"" << indexTypeString << "\"";
-  }
+  of << indent << " indexType=\"" << indexTypeString << "\"";
 
   of << indent << " numericIndexValueTolerance=\"" << this->NumericIndexValueTolerance << "\"";
 
@@ -233,6 +239,8 @@ void vtkMRMLSequenceNode::Copy(vtkMRMLNode *anode)
 
   this->SetIndexName(snode->GetIndexName());
   this->SetIndexUnit(snode->GetIndexUnit());
+  this->SetIndexType(snode->GetIndexType());
+  this->SetNumericIndexValueTolerance(snode->GetNumericIndexValueTolerance());
 
   // Clear nodes: RemoveAllNodes is not a public method, so it's simpler to just delete and recreate the scene
   this->SequenceScene->Delete();
@@ -254,6 +262,7 @@ void vtkMRMLSequenceNode::Copy(vtkMRMLNode *anode)
   {
     IndexEntryType seqItem;
     seqItem.IndexValue=sourceIndexIt->IndexValue;
+    seqItem.DataNode = NULL;
     if (sourceIndexIt->DataNode!=NULL)
     {
       seqItem.DataNode=this->SequenceScene->GetNodeByID(sourceIndexIt->DataNode->GetID());
@@ -273,6 +282,38 @@ void vtkMRMLSequenceNode::Copy(vtkMRMLNode *anode)
   this->Modified();
   this->StorableModifiedTime.Modified();
 
+  this->EndModify(wasModified);
+}
+
+//----------------------------------------------------------------------------
+void vtkMRMLSequenceNode::CopySequenceIndex(vtkMRMLNode *anode)
+{
+  int wasModified = this->StartModify();
+  vtkMRMLSequenceNode *snode = (vtkMRMLSequenceNode *)anode;
+  this->SetIndexName(snode->GetIndexName());
+  this->SetIndexUnit(snode->GetIndexUnit());
+  this->SetIndexType(snode->GetIndexType());
+  this->SetNumericIndexValueTolerance(snode->GetNumericIndexValueTolerance());
+  if (this->IndexEntries.size() > 0 || snode->IndexEntries.size() > 0)
+  {
+    this->IndexEntries.clear();
+    for (std::deque< IndexEntryType >::iterator sourceIndexIt = snode->IndexEntries.begin(); sourceIndexIt != snode->IndexEntries.end(); ++sourceIndexIt)
+    {
+      IndexEntryType seqItem;
+      seqItem.IndexValue = sourceIndexIt->IndexValue;
+      if (sourceIndexIt->DataNode != NULL)
+      {
+        seqItem.DataNodeID = sourceIndexIt->DataNode->GetID();
+      }
+      else
+      {
+        seqItem.DataNodeID = sourceIndexIt->DataNodeID;
+      }
+      seqItem.DataNode = NULL;
+      this->IndexEntries.push_back(seqItem);
+    }
+    this->Modified();
+  }
   this->EndModify(wasModified);
 }
 
@@ -339,16 +380,16 @@ int vtkMRMLSequenceNode::GetInsertPosition(const std::string& indexValue)
   int insertPosition = this->IndexEntries.size();
   if (this->IndexType == vtkMRMLSequenceNode::NumericIndex && !this->IndexEntries.empty())
   {
+    int itemNumber = this->GetItemNumberFromIndexValue(indexValue, false);
     double numericIndexValue = atof(indexValue.c_str());
-    int numberOfSeqItems = this->IndexEntries.size();
-    for (int i = 0; i < numberOfSeqItems; i++)
+    double foundNumericIndexValue = atof(this->IndexEntries[itemNumber].IndexValue.c_str());
+    if (numericIndexValue < foundNumericIndexValue) // Deals with case of index value being smaller than any in the sequence and numeric tolerances
     {
-      double foundNumericIndexValue = atof(this->IndexEntries[i].IndexValue.c_str());
-      if (foundNumericIndexValue > numericIndexValue)
-      {
-        insertPosition = i;
-        break;
-      }
+      insertPosition = itemNumber;
+    }
+    else
+    {
+      insertPosition = itemNumber + 1;
     }
   }
   return insertPosition;
@@ -398,7 +439,7 @@ void vtkMRMLSequenceNode::RemoveDataNodeAtValue(const std::string& indexValue)
   this->StorableModifiedTime.Modified();
 }
 
-//----------------------------------------------------------------------------
+//---------------------------------------------------------------------------
 int vtkMRMLSequenceNode::GetItemNumberFromIndexValue(const std::string& indexValue, bool exactMatchRequired /* =true */)
 {
   int numberOfSeqItems=this->IndexEntries.size();
@@ -406,6 +447,65 @@ int vtkMRMLSequenceNode::GetItemNumberFromIndexValue(const std::string& indexVal
   {
     return -1;
   }
+
+  // Binary search will be faster for numeric index
+  if (this->IndexType == NumericIndex)
+  {
+    int lowerBound = 0;
+    int upperBound = numberOfSeqItems-1;
+
+    // Deal with index values not within the range of index values in the Sequence
+    double numericIndexValue = atof(indexValue.c_str());
+    double lowerNumericIndexValue = atof(this->IndexEntries[lowerBound].IndexValue.c_str());
+    double upperNumericIndexValue = atof(this->IndexEntries[upperBound].IndexValue.c_str());
+    if (numericIndexValue <= lowerNumericIndexValue + this->NumericIndexValueTolerance)
+    {
+      if (numericIndexValue < lowerNumericIndexValue - this->NumericIndexValueTolerance && exactMatchRequired)
+      {
+        return -1;
+      }
+      else
+      {
+        return lowerBound;
+      }
+    }
+    if (numericIndexValue >= upperNumericIndexValue - this->NumericIndexValueTolerance)
+    {
+      if (numericIndexValue > upperNumericIndexValue + this->NumericIndexValueTolerance && exactMatchRequired)
+      {
+        return -1;
+      }
+      else
+      {
+        return upperBound;
+      }
+    }
+
+    while (upperBound - lowerBound > 1)
+    {
+      // Note that if middle is equal to either lowerBound or upperBound then upperBound - lowerBound <= 1
+      int middle = int((lowerBound + upperBound)/2);
+      double middleNumericIndexValue = atof(this->IndexEntries[middle].IndexValue.c_str());
+      if (fabs(numericIndexValue - middleNumericIndexValue) <= this->NumericIndexValueTolerance)
+      {
+        return middle;
+      }
+      if (numericIndexValue > middleNumericIndexValue)
+      {
+        lowerBound = middle;
+      }
+      if (numericIndexValue < middleNumericIndexValue)
+      {
+        upperBound = middle;
+      }
+    }
+    if (!exactMatchRequired)
+    {
+      return lowerBound;
+    }
+  }
+
+  // Need linear search for non-numeric index
   for (int i=0; i<numberOfSeqItems; i++)
   {
     if (this->IndexEntries[i].IndexValue.compare(indexValue)==0)
@@ -413,30 +513,7 @@ int vtkMRMLSequenceNode::GetItemNumberFromIndexValue(const std::string& indexVal
       return i;
     }
   }
-  if (this->IndexType == NumericIndex)
-  {
-    // find index value right before the requested one
-    double numericIndexValue = atof(indexValue.c_str());
-    int i = 0;
-    for (; i < numberOfSeqItems; i++)
-    {
-      double foundNumericIndexValue = atof(this->IndexEntries[i].IndexValue.c_str());
-      if (fabs(foundNumericIndexValue - numericIndexValue) <= this->NumericIndexValueTolerance)
-      {
-        // found an exact match
-        return i;
-      }
-      if (foundNumericIndexValue > numericIndexValue)
-      {
-        break;
-      }
-    }
-    if (exactMatchRequired)
-    {
-      return -1;
-    }
-    return (i == 0) ? 0 : i - 1;
-  }
+
   return -1;
 }
 
@@ -576,6 +653,12 @@ vtkMRMLStorageNode* vtkMRMLSequenceNode::CreateDefaultStorageNode()
 //-----------------------------------------------------------
 std::string vtkMRMLSequenceNode::GetDefaultStorageNodeClassName(const char* filename /* =NULL */)
 {
+  // No need to create storage node if there are no nodes to store
+  if (this->GetSequenceScene() == NULL || this->GetSequenceScene()->GetNumberOfNodes() == 0)
+  {
+    return "";
+  }
+
   // Use specific volume sequence storage node, if possible
   std::vector< vtkSmartPointer<vtkMRMLStorageNode> > specializedStorageNodes;
   specializedStorageNodes.push_back(vtkSmartPointer<vtkMRMLVolumeSequenceStorageNode>::New());
@@ -593,7 +676,9 @@ std::string vtkMRMLSequenceNode::GetDefaultStorageNodeClassName(const char* file
     {
       return (*specializedStorageNodeIt)->GetClassName();
     }
-  } // Use generic storage node
+  }
+  
+  // Use generic storage node
   return "vtkMRMLSequenceStorageNode";
 }
 
@@ -603,12 +688,18 @@ void vtkMRMLSequenceNode::UpdateScene(vtkMRMLScene *scene)
   Superclass::UpdateScene(scene);
 
   // By now the storage node imported the sequence scene, so we can get the pointers to the data nodes
-  for(std::deque< IndexEntryType >::iterator indexIt=this->IndexEntries.begin(); indexIt!=this->IndexEntries.end(); ++indexIt)
+  this->UpdateSequenceIndex();
+}
+
+//-----------------------------------------------------------
+void vtkMRMLSequenceNode::UpdateSequenceIndex()
+{
+  for (std::deque< IndexEntryType >::iterator indexIt = this->IndexEntries.begin(); indexIt != this->IndexEntries.end(); ++indexIt)
   {
-    if (indexIt->DataNode==NULL)
+    if (indexIt->DataNode == NULL)
     {
       indexIt->DataNode = this->SequenceScene->GetNodeByID(indexIt->DataNodeID);
-      if (indexIt->DataNode!=NULL)
+      if (indexIt->DataNode != NULL)
       {
         // clear the ID to remove redundancy in the data
         indexIt->DataNodeID.clear();

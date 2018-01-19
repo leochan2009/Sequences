@@ -227,7 +227,7 @@ void vtkSlicerSequenceBrowserLogic::UpdateProxyNodesFromSequences(vtkMRMLSequenc
   
   int selectedItemNumber=browserNode->GetSelectedItemNumber();
   std::string indexValue("0");
-  if (selectedItemNumber >= 0 && selectedItemNumber < browserNode->GetMasterSequenceNode()->GetNumberOfDataNodes())
+  if (selectedItemNumber >= 0 && selectedItemNumber < browserNode->GetNumberOfItems())
   {
     indexValue=browserNode->GetMasterSequenceNode()->GetNthIndexValue(selectedItemNumber);
   }
@@ -540,8 +540,16 @@ void vtkSlicerSequenceBrowserLogic::ProcessMRMLNodesEvents(vtkObject *caller, un
   }
   else if (event == vtkMRMLSequenceBrowserNode::ProxyNodeModifiedEvent)
   {
-    // One of the proxy nodes changed, update the sequence as needed
-    this->UpdateSequencesFromProxyNodes(browserNode, vtkMRMLNode::SafeDownCast((vtkObject*)callData));
+    // During import proxy node may change but we don't want to modify the sequence node with it
+    // because the saved proxy node might be obsolete (for example, not saved when the scene was saved).
+    // It might be useful to update all proxy nodes on SceneEndImport/Restore to make sure the state is consistent.
+    if (this->GetMRMLScene() &&
+      !this->GetMRMLScene()->IsImporting() &&
+      !this->GetMRMLScene()->IsRestoring())
+    {
+      // One of the proxy nodes changed, update the sequence as needed
+      this->UpdateSequencesFromProxyNodes(browserNode, vtkMRMLNode::SafeDownCast((vtkObject*)callData));
+    }
   }
 }
 
@@ -592,4 +600,53 @@ bool vtkSlicerSequenceBrowserLogic::IsNodeCompatibleForBrowsing(vtkMRMLSequenceN
     && masterNode->GetIndexUnit() == testedNode->GetIndexUnit()
     && masterNode->GetIndexType() == testedNode->GetIndexType());
   return compatible;
+}
+
+//---------------------------------------------------------------------------
+void vtkSlicerSequenceBrowserLogic::GetBrowserNodesForSequenceNode(vtkMRMLSequenceNode* sequenceNode, vtkCollection* foundBrowserNodes)
+{
+  if (this->GetMRMLScene() == NULL)
+  {
+    vtkErrorMacro("Scene is invalid");
+    return;
+  }
+  if (foundBrowserNodes == NULL)
+  {
+    vtkErrorMacro("foundBrowserNodes is invalid");
+    return;
+  }
+  foundBrowserNodes->RemoveAllItems();
+  std::vector< vtkMRMLNode* > browserNodes;
+  this->GetMRMLScene()->GetNodesByClass("vtkMRMLSequenceBrowserNode", browserNodes);
+  for (std::vector< vtkMRMLNode* >::iterator browserNodeIt = browserNodes.begin(); browserNodeIt != browserNodes.end(); ++browserNodeIt)
+  {
+    vtkMRMLSequenceBrowserNode* browserNode = vtkMRMLSequenceBrowserNode::SafeDownCast(*browserNodeIt);
+    if (browserNode->IsSynchronizedSequenceNode(sequenceNode, true))
+    {
+      foundBrowserNodes->AddItem(browserNode);
+    }
+  }      
+}
+
+ ;
+
+//---------------------------------------------------------------------------
+vtkMRMLSequenceBrowserNode* vtkSlicerSequenceBrowserLogic::GetFirstBrowserNodeForSequenceNode(vtkMRMLSequenceNode* sequenceNode)
+{
+  if (this->GetMRMLScene() == NULL)
+  {
+    vtkErrorMacro("Scene is invalid");
+    return NULL;
+  }
+  std::vector< vtkMRMLNode* > browserNodes;
+  this->GetMRMLScene()->GetNodesByClass("vtkMRMLSequenceBrowserNode", browserNodes);
+  for (std::vector< vtkMRMLNode* >::iterator browserNodeIt = browserNodes.begin(); browserNodeIt != browserNodes.end(); ++browserNodeIt)
+  {
+    vtkMRMLSequenceBrowserNode* browserNode = vtkMRMLSequenceBrowserNode::SafeDownCast(*browserNodeIt);
+    if (browserNode->IsSynchronizedSequenceNode(sequenceNode, true))
+    {
+      return browserNode;
+    }
+  }
+  return NULL;
 }

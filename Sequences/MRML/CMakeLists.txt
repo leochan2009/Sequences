@@ -5,17 +5,10 @@ set(KIT ${PROJECT_NAME})
 set(${KIT}_EXPORT_DIRECTIVE "VTK_SLICER_${MODULE_NAME_UPPER}_MODULE_MRML_EXPORT")
 
 include_directories(BEFORE ${vtkTeem_INCLUDE_DIRS})
-find_package(OpenIGTLinkIO REQUIRED)
-
-set(vtkSlicerOpenIGTLinkIFModuleMRML_SOURCE_DIR "/Users/longquanchen/Desktop/Github/Slicer-build/OpenIGTLinkIF/MRML")
-set(vtkSlicerOpenIGTLinkIFModuleMRML_BINARY_DIR "/Users/longquanchen/Desktop/Github/Slicer-build/OpenIGTLinkIF-XcodeBuild/MRML")
-set(vtkSlicerOpenIGTLinkIFModuleMRML optimized /Users/longquanchen/Desktop/Github/Slicer-build/OpenIGTLinkIF-XcodeBuild/lib/Slicer-4.9/qt-loadable-modules/Release/libvtkSlicerOpenIGTLinkIFModuleMRML.dylib debug /Users/longquanchen/Desktop/Github/Slicer-build/OpenIGTLinkIF-XcodeBuild/lib/Slicer-4.9/qt-loadable-modules/Debug/libvtkSlicerOpenIGTLinkIFModuleMRML.dylib)
-
 set(${KIT}_INCLUDE_DIRECTORIES
   ${Slicer_Base_INCLUDE_DIRS}
   ${OpenIGTLinkIO_INCLUDE_DIRS}
-  ${vtkSlicerOpenIGTLinkIFModuleMRML_SOURCE_DIR}
-  ${vtkSlicerOpenIGTLinkIFModuleMRML_BINARY_DIR}
+  ${qSlicerOpenIGTLinkIFModule_INCLUDE_DIRS}
   )
 
 set(${KIT}_SRCS
@@ -34,14 +27,12 @@ set(${KIT}_SRCS
   )
 
 set(${KIT}_TARGET_LIBRARIES
-  ${OpenIGTLink_LIBRARIES}
-  ${OpenIGTLinkIO_LIBRARIES}
   ${ITK_LIBRARIES}
   ${MRML_LIBRARIES}
   SlicerBaseLogic
   qSlicerBaseQTCLI
   vtkSlicerMarkupsModuleMRML
-  ${vtkSlicerOpenIGTLinkIFModuleMRML}
+  vtkSlicerOpenIGTLinkIFModuleMRML
   )
 
 #-----------------------------------------------------------------------------

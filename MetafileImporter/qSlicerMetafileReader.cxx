@@ -13,14 +13,17 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 
+  This file was originally developed by Julien Finet, Kitware Inc.
+  and was partially funded by NIH grant 3P41RR013218-12S1
+
 ==============================================================================*/
 
 // Qt includes
 #include <QDebug>
 
 // SlicerQt includes
+#include "qSlicerMetafileReader.h"
 #include "qSlicerMetafileImporterModule.h"
-#include "qSlicerVolumeSequenceImporterIO.h"
 
 // Logic includes
 #include "vtkSlicerMetafileImporterLogic.h"
@@ -29,76 +32,93 @@
 #include "vtkMRMLSequenceBrowserNode.h"
 
 // VTK includes
+#include <vtkCollection.h>
+#include <vtkNew.h>
 #include <vtkSmartPointer.h>
 
 //-----------------------------------------------------------------------------
-class qSlicerVolumeSequenceImporterIOPrivate
+class qSlicerMetafileReaderPrivate
 {
 public:
   vtkSmartPointer<vtkSlicerMetafileImporterLogic> MetafileImporterLogic;
 };
 
 //-----------------------------------------------------------------------------
-qSlicerVolumeSequenceImporterIO::qSlicerVolumeSequenceImporterIO( vtkSlicerMetafileImporterLogic* newMetafileImporterLogic, QObject* _parent)
+qSlicerMetafileReader::qSlicerMetafileReader( vtkSlicerMetafileImporterLogic* newMetafileImporterLogic, QObject* _parent)
   : Superclass(_parent)
-  , d_ptr(new qSlicerVolumeSequenceImporterIOPrivate)
+  , d_ptr(new qSlicerMetafileReaderPrivate)
 {
   this->setMetafileImporterLogic( newMetafileImporterLogic );
 }
 
 //-----------------------------------------------------------------------------
-qSlicerVolumeSequenceImporterIO::~qSlicerVolumeSequenceImporterIO()
+qSlicerMetafileReader::~qSlicerMetafileReader()
 {
 }
 
 //-----------------------------------------------------------------------------
-void qSlicerVolumeSequenceImporterIO::setMetafileImporterLogic(vtkSlicerMetafileImporterLogic* newMetafileImporterLogic)
+void qSlicerMetafileReader::setMetafileImporterLogic(vtkSlicerMetafileImporterLogic* newMetafileImporterLogic)
 {
-  Q_D(qSlicerVolumeSequenceImporterIO);
+  Q_D(qSlicerMetafileReader);
   d->MetafileImporterLogic = newMetafileImporterLogic;
 }
 
 //-----------------------------------------------------------------------------
-vtkSlicerMetafileImporterLogic* qSlicerVolumeSequenceImporterIO::metafileImporterLogic() const
+vtkSlicerMetafileImporterLogic* qSlicerMetafileReader::MetafileImporterLogic() const
 {
-  Q_D(const qSlicerVolumeSequenceImporterIO);
+  Q_D(const qSlicerMetafileReader);
   return d->MetafileImporterLogic;
 }
 
 //-----------------------------------------------------------------------------
-QString qSlicerVolumeSequenceImporterIO::description() const
+QString qSlicerMetafileReader::description() const
 {
-  return "Volume Sequence";
+  return "Sequence Metafile";
 }
 
 //-----------------------------------------------------------------------------
-qSlicerIO::IOFileType qSlicerVolumeSequenceImporterIO::fileType() const
+qSlicerIO::IOFileType qSlicerMetafileReader::fileType() const
 {
-  return QString("Volume Sequence");
+  return QString("Sequence Metafile");
 }
 
 //-----------------------------------------------------------------------------
-QStringList qSlicerVolumeSequenceImporterIO::extensions() const
+QStringList qSlicerMetafileReader::extensions() const
 {
-  return QStringList() << "Volume Sequence (*.seq.nrrd *.seq.nhdr)" << "Volume Sequence (*.nrrd *.nhdr)";
+  return QStringList() << "Sequence Metafile (*.seq.mha *.seq.mhd *.mha *.mhd)";
 }
 
 //-----------------------------------------------------------------------------
-bool qSlicerVolumeSequenceImporterIO::load(const IOProperties& properties)
+bool qSlicerMetafileReader::load(const IOProperties& properties)
 {
-  Q_D(qSlicerVolumeSequenceImporterIO);
+  Q_D(qSlicerMetafileReader);
   if (!properties.contains("fileName"))
   {
-    qCritical() << "qSlicerVolumeSequenceImporterIO::load did not receive fileName property";
+    qCritical() << "qSlicerMetafileReader::load did not receive fileName property";
   }
   QString fileName = properties["fileName"].toString();
-
-  vtkMRMLSequenceBrowserNode* browserNode = d->MetafileImporterLogic->ReadVolumeSequence( fileName.toStdString() );
+  
+  vtkNew<vtkCollection> loadedSequenceNodes;  
+  vtkMRMLSequenceBrowserNode* browserNode = d->MetafileImporterLogic->ReadSequenceMetafile(fileName.toStdString(), loadedSequenceNodes.GetPointer());
   if (browserNode == NULL)
   {
     return false;
   }
-
+  
+  QStringList loadedNodes;
+  loadedNodes << QString(browserNode->GetID());
+  for (int i = 0; i < loadedSequenceNodes->GetNumberOfItems(); i++)
+  {
+    vtkMRMLNode* loadedNode = vtkMRMLNode::SafeDownCast(loadedSequenceNodes->GetItemAsObject(i));
+    if (loadedNode == NULL)
+    {
+      continue;
+    }
+    loadedNodes << QString(loadedNode->GetID());
+  } 
+  
+  this->setLoadedNodes(loadedNodes);
+  
   qSlicerMetafileImporterModule::showSequenceBrowser(browserNode);
   return true;
 }

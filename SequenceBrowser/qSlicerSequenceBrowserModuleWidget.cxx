@@ -387,6 +387,7 @@ void qSlicerSequenceBrowserModuleWidget::setup()
   connect(d->checkBox_PlaybackItemSkippingEnabled, SIGNAL(toggled(bool)), this, SLOT(playbackItemSkippingEnabledChanged(bool)));
   connect(d->checkBox_RecordMasterOnly, SIGNAL(toggled(bool)), this, SLOT(recordMasterOnlyChanged(bool)));
   connect(d->comboBox_RecordingSamplingMode, SIGNAL(currentIndexChanged(int)), this, SLOT(recordingSamplingModeChanged(int)));
+  connect(d->comboBox_IndexDisplayMode, SIGNAL(currentIndexChanged(int)), this, SLOT(indexDisplayModeChanged(int)));
   connect(d->pushButton_AddSequenceNode, SIGNAL(clicked()), this, SLOT(onAddSequenceNodeButtonClicked()));
   connect(d->pushButton_RemoveSequenceNode, SIGNAL(clicked()), this, SLOT(onRemoveSequenceNodesButtonClicked()));
   d->pushButton_AddSequenceNode->setIcon( QIcon(":/Icons/Add.png" ));
@@ -400,12 +401,22 @@ void qSlicerSequenceBrowserModuleWidget::setup()
   }
 
   QHeaderView* tableWidget_SynchronizedSequenceNodes_HeaderView = d->tableWidget_SynchronizedSequenceNodes->horizontalHeader();
+
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   tableWidget_SynchronizedSequenceNodes_HeaderView->setResizeMode(SYNCH_NODES_NAME_COLUMN, QHeaderView::Interactive);
   tableWidget_SynchronizedSequenceNodes_HeaderView->setResizeMode(SYNCH_NODES_PROXY_COLUMN, QHeaderView::Interactive);
   tableWidget_SynchronizedSequenceNodes_HeaderView->setResizeMode(SYNCH_NODES_PLAYBACK_COLUMN, QHeaderView::ResizeToContents);
   tableWidget_SynchronizedSequenceNodes_HeaderView->setResizeMode(SYNCH_NODES_RECORDING_COLUMN, QHeaderView::ResizeToContents);
   tableWidget_SynchronizedSequenceNodes_HeaderView->setResizeMode(SYNCH_NODES_OVERWRITE_PROXY_NAME_COLUMN, QHeaderView::ResizeToContents);
   tableWidget_SynchronizedSequenceNodes_HeaderView->setResizeMode(SYNCH_NODES_SAVE_CHANGES_COLUMN, QHeaderView::ResizeToContents);
+#else
+  tableWidget_SynchronizedSequenceNodes_HeaderView-> setSectionResizeMode(SYNCH_NODES_NAME_COLUMN, QHeaderView::Interactive);
+  tableWidget_SynchronizedSequenceNodes_HeaderView-> setSectionResizeMode(SYNCH_NODES_PROXY_COLUMN, QHeaderView::Interactive);
+  tableWidget_SynchronizedSequenceNodes_HeaderView-> setSectionResizeMode(SYNCH_NODES_PLAYBACK_COLUMN, QHeaderView::ResizeToContents);
+  tableWidget_SynchronizedSequenceNodes_HeaderView-> setSectionResizeMode(SYNCH_NODES_RECORDING_COLUMN, QHeaderView::ResizeToContents);
+  tableWidget_SynchronizedSequenceNodes_HeaderView-> setSectionResizeMode(SYNCH_NODES_OVERWRITE_PROXY_NAME_COLUMN, QHeaderView::ResizeToContents);
+  tableWidget_SynchronizedSequenceNodes_HeaderView-> setSectionResizeMode(SYNCH_NODES_SAVE_CHANGES_COLUMN, QHeaderView::ResizeToContents);
+#endif
   
   tableWidget_SynchronizedSequenceNodes_HeaderView->setStretchLastSection(false);
 
@@ -566,6 +577,17 @@ void qSlicerSequenceBrowserModuleWidget::recordingSamplingModeChanged(int index)
 }
 
 //-----------------------------------------------------------------------------
+void qSlicerSequenceBrowserModuleWidget::indexDisplayModeChanged(int index)
+{
+  Q_D(qSlicerSequenceBrowserModuleWidget);
+  if (d->ActiveBrowserNode == NULL)
+  {
+    return; // no active node, nothing to update
+  }
+  d->ActiveBrowserNode->SetIndexDisplayMode(index);
+}
+
+//-----------------------------------------------------------------------------
 void qSlicerSequenceBrowserModuleWidget::onActiveBrowserNodeModified(vtkObject* caller)
 {
   this->updateWidgetFromMRML();
@@ -682,21 +704,19 @@ void qSlicerSequenceBrowserModuleWidget::onRemoveSequenceNodesButtonClicked()
   Q_D(qSlicerSequenceBrowserModuleWidget);
   // First, grab all of the selected rows
   QModelIndexList modelIndexList = d->tableWidget_SynchronizedSequenceNodes->selectionModel()->selectedIndexes();
-  std::vector<bool> selectedRows = std::vector<bool>(d->tableWidget_SynchronizedSequenceNodes->rowCount(), false);
+  std::vector<std::string> selectedSequenceIDs;
   for (QModelIndexList::iterator index = modelIndexList.begin(); index!=modelIndexList.end(); index++)
   {
-    selectedRows.at((*index).row()) = true;
+    QWidget* proxyNodeComboBox = d->tableWidget_SynchronizedSequenceNodes->cellWidget((*index).row(), SYNCH_NODES_PROXY_COLUMN);
+    std::string currSelectedSequenceID = proxyNodeComboBox->property("MRMLNodeID").toString().toLatin1().constData();
+	selectedSequenceIDs.push_back(currSelectedSequenceID);
+    disconnect(proxyNodeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onProxyNodeChanged(vtkMRMLNode*))); // No need to reconnect - the entire row is going to be removed
   }
   // Now, use the MRML ID stored by the proxy node combo box to determine the sequence nodes to remove from the browser
-  for (int i=0; i<selectedRows.size(); i++)
+  std::vector<std::string>::iterator sequenceIDItr;
+  for (sequenceIDItr = selectedSequenceIDs.begin(); sequenceIDItr != selectedSequenceIDs.end(); sequenceIDItr++)
   {
-    if (selectedRows.at(i))
-    {
-      QWidget* proxyNodeComboBox = d->tableWidget_SynchronizedSequenceNodes->cellWidget(i, SYNCH_NODES_PROXY_COLUMN);
-      std::string synchronizedNodeID = proxyNodeComboBox->property("MRMLNodeID").toString().toLatin1().constData();
-      disconnect(proxyNodeComboBox, SIGNAL(currentNodeChanged(vtkMRMLNode*)), this, SLOT(onProxyNodeChanged(vtkMRMLNode*))); // No need to reconnect - the entire row is going to be removed
-      d->ActiveBrowserNode->RemoveSynchronizedSequenceNode(synchronizedNodeID.c_str());
-    }
+    d->ActiveBrowserNode->RemoveSynchronizedSequenceNode((*sequenceIDItr).c_str());
   }
 }
 
@@ -732,6 +752,10 @@ void qSlicerSequenceBrowserModuleWidget::updateWidgetFromMRML()
   wasBlocked = d->comboBox_RecordingSamplingMode->blockSignals(true);
   d->comboBox_RecordingSamplingMode->setCurrentIndex(d->ActiveBrowserNode->GetRecordingSamplingMode());
   d->comboBox_RecordingSamplingMode->blockSignals(wasBlocked);
+
+  wasBlocked = d->comboBox_IndexDisplayMode->blockSignals(true);
+  d->comboBox_IndexDisplayMode->setCurrentIndex(d->ActiveBrowserNode->GetIndexDisplayMode());
+  d->comboBox_IndexDisplayMode->blockSignals(wasBlocked);
 
   this->refreshSynchronizedSequenceNodesTable();
 }

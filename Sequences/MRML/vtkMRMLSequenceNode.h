@@ -60,21 +60,28 @@ public:
   /// Copy the node's attributes to this object 
   virtual void Copy(vtkMRMLNode *node);
 
+  /// Copy sequence index information (index name, unit, type, values, etc)
+  /// Does not copy data nodes.
+  virtual void CopySequenceIndex(vtkMRMLNode *node);
+
+  /// Update sequence index to point to nodes
+  void UpdateSequenceIndex();
+
   /// Get unique node XML tag name (like Volume, Model) 
   virtual const char* GetNodeTagName() {return "Sequence";};
 
   /// Set index name (example: time)
-  vtkSetMacro(IndexName, std::string);
+  void SetIndexName(const std::string& str);
   /// Get index name (example: time)
   vtkGetMacro(IndexName, std::string);
 
   /// Set unit for the index (example: s)
-  vtkSetMacro(IndexUnit, std::string);
+  void SetIndexUnit(const std::string& str);
   /// Get unit for the index (example: s)
   vtkGetMacro(IndexUnit, std::string);
 
   /// Set the type of the index (numeric, text, ...)
-  vtkSetMacro(IndexType, int);
+  void SetIndexType(int indexType);
   void SetIndexTypeFromString(const char *indexTypeString);
   /// Get the type of the index (numeric, text, ...)
   vtkGetMacro(IndexType, int);
@@ -84,7 +91,7 @@ public:
   /// then the index values considered to be equal.
   vtkGetMacro(NumericIndexValueTolerance, double);
   /// Set tolerance value for comparing numerix index values.
-  vtkSetMacro(NumericIndexValueTolerance, double);
+  void SetNumericIndexValueTolerance(double tolerance);
 
   /// Helper functions for converting between string and code representation of the index type
   static std::string GetIndexTypeAsString(int indexType);
@@ -114,10 +121,12 @@ public:
   std::string GetNthIndexValue(int itemNumber);
 
   /// If exact match is not required and index is numeric then the best matching data node is returned.
+  /// If the sequences has numeric index, uses data node just before the index value in the case of non-exact match
   int GetItemNumberFromIndexValue(const std::string& indexValue, bool exactMatchRequired = true);
 
   bool UpdateIndexValue(const std::string& oldIndexValue, const std::string& newIndexValue);
 
+  /// Return the number of nodes stored in this sequence.
   int GetNumberOfDataNodes();
 
   /// Return the class name of the data nodes (e.g., vtkMRMLTransformNode). If there are no data nodes yet then it returns empty string.

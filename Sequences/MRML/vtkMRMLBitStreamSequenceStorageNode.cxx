@@ -11,7 +11,7 @@
 #include "vtkMRMLBitStreamSequenceStorageNode.h"
 #include "vtkMRMLSequenceNode.h"
 #include "vtkMRMLScene.h"
-#include "vtkMRMLBitStreamNode.h"
+#include "MRML/vtkMRMLBitStreamNode.h"
 #include <vtkCollection.h>
 
 #include "vtkObjectFactory.h"

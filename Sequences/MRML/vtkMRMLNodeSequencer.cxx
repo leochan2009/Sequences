@@ -27,6 +27,7 @@
 #include <vtkImageData.h>
 #include <vtkIntArray.h>
 #include <vtkMatrix4x4.h>
+#include <vtkDoubleArray.h>
 #include <vtkMRMLCameraNode.h>
 #include <vtkMRMLMarkupsFiducialNode.h>
 #include <vtkMRMLModelNode.h>
@@ -39,12 +40,13 @@
 #include <vtkMRMLViewNode.h>
 #include <vtkMRMLVectorVolumeNode.h>
 #include <vtkMRMLVolumeNode.h>
+#include <vtkMRMLDoubleArrayNode.h>
 #include <vtkNew.h>
 #include <vtkObjectFactory.h>
 #include <vtkPolyData.h>
 
 // OpenIGTLinkIF node include
-#include "vtkMRMLBitStreamNode.h"
+#include "MRML/vtkMRMLBitStreamNode.h"
 
 //----------------------------------------------------------------------------
 
@@ -117,13 +119,13 @@ vtkMRMLNode* vtkMRMLNodeSequencer::NodeSequencer::DeepCopyNodeToScene(vtkMRMLNod
   {
     baseName = source->GetName();
   }
-  std::string newNodeName = scene->GetUniqueNameByString(baseName.c_str());
+  std::string newNodeName = baseName;
 
   vtkSmartPointer<vtkMRMLNode> target = vtkSmartPointer<vtkMRMLNode>::Take(source->CreateNodeInstance());
   this->CopyNode(source, target, false);
 
-  // Make sure all the node names in the sequence's scene are unique for saving purposes
-  // TODO: it would be better to make sure all names are unique when saving the data?
+  // Generating unique node names is slow, and makes adding many nodes to a sequence too slow
+  // We will instead ensure that all file names for storable nodes are unique when saving
   target->SetName(newNodeName.c_str());
   target->SetAttribute("Sequences.BaseName", baseName.c_str());
 
@@ -371,13 +373,36 @@ public:
     int oldModified = target->StartModify();
     vtkMRMLTransformNode* targetTransformNode = vtkMRMLTransformNode::SafeDownCast(target);
     vtkMRMLTransformNode* sourceTransformNode = vtkMRMLTransformNode::SafeDownCast(source);
-    vtkSmartPointer<vtkAbstractTransform> targetAbstractTransform = sourceTransformNode->GetTransformToParent();
-    if (!shallowCopy && targetAbstractTransform.GetPointer()!=NULL)
+    vtkAbstractTransform* sourceTransform;
+    bool setAsTransformToParent = vtkMRMLTransformNode::IsAbstractTransformComputedFromInverse(sourceTransformNode->GetTransformFromParent());
+    if (setAsTransformToParent)
     {
-      targetAbstractTransform = vtkSmartPointer<vtkAbstractTransform>::Take(sourceTransformNode->GetTransformToParent()->NewInstance());
-      targetAbstractTransform->DeepCopy(sourceTransformNode->GetTransformToParent());
+      sourceTransform = sourceTransformNode->GetTransformToParent();
     }
-    targetTransformNode->SetAndObserveTransformToParent(targetAbstractTransform);
+    else
+    {
+      sourceTransform = sourceTransformNode->GetTransformFromParent();
+    }
+    vtkSmartPointer<vtkAbstractTransform> targetTransform;
+    if (shallowCopy || sourceTransform == NULL)
+    {
+      targetTransform = sourceTransform;
+    }
+    else
+    {
+      targetTransform = vtkSmartPointer<vtkAbstractTransform>::Take(sourceTransform->NewInstance());
+      // vtkAbstractTransform's DeepCopy does not do a full deep copy, therefore
+      // we need to use vtkMRMLTransformNode's utility method instead.
+      vtkMRMLTransformNode::DeepCopyTransform(targetTransform, sourceTransform);
+    }
+    if (setAsTransformToParent)
+    {
+      targetTransformNode->SetAndObserveTransformToParent(targetTransform);
+    }
+    else
+    {
+      targetTransformNode->SetAndObserveTransformFromParent(targetTransform);
+    }
     target->EndModify(oldModified);
   }
 
@@ -594,8 +619,40 @@ public:
 };
 
 //----------------------------------------------------------------------------
-// Needed when we don't use the vtkStandardNewMacro.
-vtkInstantiatorNewMacro(vtkMRMLNodeSequencer);
+
+class DoubleArrayNodeSequencer : public vtkMRMLNodeSequencer::NodeSequencer
+{
+public:
+  DoubleArrayNodeSequencer()
+  {
+    this->SupportedNodeClassName = "vtkMRMLDoubleArrayNode";
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLStorableNode");
+    this->SupportedNodeParentClassNames.push_back("vtkMRMLNode");
+  }
+
+  virtual void CopyNode(vtkMRMLNode* source, vtkMRMLNode* target, bool shallowCopy /* =false */)
+  {
+    int oldModified = target->StartModify();
+    vtkMRMLDoubleArrayNode* targetDoubleArrayNode = vtkMRMLDoubleArrayNode::SafeDownCast(target);
+    vtkMRMLDoubleArrayNode* sourceDoubleArrayNode = vtkMRMLDoubleArrayNode::SafeDownCast(source);
+    targetDoubleArrayNode->CopyWithoutModifiedEvent(sourceDoubleArrayNode); // Copies the attributes, etc.
+    vtkDoubleArray* targetDoubleArray = sourceDoubleArrayNode->GetArray();
+    if (!shallowCopy && targetDoubleArray!=NULL)
+    {
+      targetDoubleArray = sourceDoubleArrayNode->GetArray()->NewInstance();
+      targetDoubleArray->DeepCopy(sourceDoubleArrayNode->GetArray());
+    }
+    targetDoubleArrayNode->SetArray(targetDoubleArray);
+    target->EndModify(oldModified);
+  }
+
+};
+
+//----------------------------------------------------------------------------
+#if VTK_MAJOR_VERSION < 9
+  // Needed when we don't use the vtkStandardNewMacro.
+  vtkInstantiatorNewMacro(vtkMRMLNodeSequencer);
+#endif
 
 //----------------------------------------------------------------------------
 // vtkMRMLNodeSequencer methods
@@ -642,6 +699,7 @@ vtkMRMLNodeSequencer::vtkMRMLNodeSequencer():Superclass()
   this->RegisterNodeSequencer(new SliceCompositeNodeSequencer());
   this->RegisterNodeSequencer(new ViewNodeSequencer());
   this->RegisterNodeSequencer(new MarkupsFiducialNodeSequencer());
+  this->RegisterNodeSequencer(new DoubleArrayNodeSequencer());
   this->RegisterNodeSequencer(new BitStreamNodeSequencer());
 }
 
