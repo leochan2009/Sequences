@@ -237,7 +237,7 @@ int vtkMRMLBitStreamSequenceStorageNode::ReadDataInternal(vtkMRMLNode* refNode)
           {
           break;
           }
-        else if (errorCode == 1)
+        else if (errorCode == 1 && atoi(stringMessageLength.c_str()) > 0)
           {
           igtl::MessageHeader::Pointer headerMsg = igtl::MessageHeader::New();
           headerMsg->InitPack();
@@ -382,18 +382,21 @@ int vtkMRMLBitStreamSequenceStorageNode::WriteDataInternal(vtkMRMLNode *refNode)
     {
       igtl::VideoMessage::Pointer frameMsg = frameBitStream->GetMessageStreamBuffer();
       int messageLength = frameMsg->GetPackSize();
-      outStream.write(timeStamp.c_str(), timeStamp.size());
-      outStream <<": "<<messageLength << std::endl;
-      if(frameBitStream->GetKeyFrameUpdated())
-        {
-        outStream<< "IsKeyFrame: " << 1 << std::endl;
-        }
-      else
-        {
-        outStream<< "IsKeyFrame: " << 0 << std::endl;
-        }
-      outStream.write((char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer(), messageLength);
-      outStream << std::endl;
+      if (messageLength > 0)
+      {
+        outStream.write(timeStamp.c_str(), timeStamp.size());
+        outStream <<": "<<messageLength << std::endl;
+        if(frameBitStream->GetKeyFrameUpdated())
+          {
+          outStream<< "IsKeyFrame: " << 1 << std::endl;
+          }
+        else
+          {
+          outStream<< "IsKeyFrame: " << 0 << std::endl;
+          }
+        outStream.write((char*)frameBitStream->GetMessageStreamBuffer()->GetPackPointer(), messageLength);
+        outStream << std::endl;
+      }
     }
   }
   

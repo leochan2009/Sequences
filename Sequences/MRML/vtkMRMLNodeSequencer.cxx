@@ -46,8 +46,10 @@
 #include <vtkPolyData.h>
 
 // OpenIGTLinkIF node include
-#include "vtkMRMLBitStreamNode.h"
-
+#include "igtlConfigure.h"
+#if defined(OpenIGTLink_ENABLE_VIDEOSTREAMING)
+  #include "vtkMRMLBitStreamNode.h"
+#endif
 //----------------------------------------------------------------------------
 
 vtkMRMLNodeSequencer::NodeSequencer::NodeSequencer()
@@ -206,7 +208,7 @@ public:
 
 
 //----------------------------------------------------------------------------
-
+#if defined(OpenIGTLink_ENABLE_VIDEOSTREAMING)
 class BitStreamNodeSequencer : public vtkMRMLNodeSequencer::NodeSequencer
 {
 public:
@@ -228,10 +230,11 @@ public:
     vtkMRMLBitStreamNode* sourceBitStreamNode = vtkMRMLBitStreamNode::SafeDownCast(source);
     igtl::VideoMessage::Pointer msgstream = sourceBitStreamNode->GetMessageStreamBuffer();
     targetBitStreamNode->SetScene(sourceBitStreamNode->GetScene());
-
+    
+    //! To avoid multiple copy of the source when the sampling rate is high. Copy status will be set to true
+    //  after the source bit stream gets copied. The copy status will be set to false in the ProcessDeviceModifiedEvents of the bit stream node.
     if (!shallowCopy && targetBitStreamNode && !sourceBitStreamNode->GetIsCopied())
       {
-      std::cout<<msgstream->GetPackSize()<<std::endl;
       targetBitStreamNode->SetCodecName(sourceBitStreamNode->GetCodecName());
       targetBitStreamNode->SetMessageStream(msgstream);
       targetBitStreamNode->SetKeyFrameStream(sourceBitStreamNode->GetKeyFrameStream());
@@ -259,7 +262,7 @@ public:
     target->EndModify(oldModified);
   }
 };
-
+#endif
 
 //----------------------------------------------------------------------------
 
@@ -700,7 +703,9 @@ vtkMRMLNodeSequencer::vtkMRMLNodeSequencer():Superclass()
   this->RegisterNodeSequencer(new ViewNodeSequencer());
   this->RegisterNodeSequencer(new MarkupsFiducialNodeSequencer());
   this->RegisterNodeSequencer(new DoubleArrayNodeSequencer());
+#if defined(OpenIGTLink_ENABLE_VIDEOSTREAMING)
   this->RegisterNodeSequencer(new BitStreamNodeSequencer());
+#endif  
 }
 
 //----------------------------------------------------------------------------
